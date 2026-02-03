@@ -48,6 +48,11 @@ with st.sidebar:
         value=CONFIG["project_metadata"]["project"],
         help="Your project name"
     )
+    pi = st.text_input(
+        "Principal Investigator",
+        value=CONFIG["project_metadata"].get("pi", "Your_PI_Initials"),
+        help="PI initials or name"
+    )
     funding = st.text_input(
         "Funding Source",
         value=CONFIG["project_metadata"].get("funding", "none"),
@@ -69,11 +74,14 @@ with st.sidebar:
     CONFIG["project_metadata"]["experimenter"] = experimenter
     CONFIG["project_metadata"]["location"] = location
     CONFIG["project_metadata"]["project"] = project
+    CONFIG["project_metadata"]["pi"] = pi
     CONFIG["project_metadata"]["funding"] = funding if funding else "none"
     
     # Store manual persistent ID if provided
     if manual_persistent_id:
         CONFIG["manual_persistent_id"] = manual_persistent_id
+    
+    st.info("ℹ️ Configuration changes apply when you click 'Analyze Files'")
 
 # Main content
 st.header("📤 Upload NTA Files")
@@ -158,12 +166,44 @@ if st.session_state.results:
         
         metadata = results['metadata']
         
-        # Simple table of all metadata
-        metadata_df = pd.DataFrame([
-            {'Field': k, 'Value': v} 
-            for k, v in sorted(metadata.items())
-        ])
+        # Define sections in order (same as in save_metadata_file)
+        sections = {
+            'SAMPLE & PROJECT INFORMATION': [
+                'persistentID', 'sample', 'electrolyte', 'date', 'num_replicates'
+            ],
+            'EXPERIMENTER & LOCATION': [
+                'experimenter', 'location', 'project', 'pi', 'funding'
+            ],
+            'INSTRUMENT & METHOD': [
+                'data_collection_method', 'nta_instrument', 'nta_software'
+            ],
+            'MEASUREMENT CONDITIONS': [
+                'nta_temperature', 'nta_ph', 'nta_conductivity', 
+                'nta_dilution', 'nta_viscosity'
+            ],
+            'MEASUREMENT PARAMETERS': [
+                'nta_laser_wavelength', 'nta_positions', 'nta_cycles', 'nta_fps'
+            ],
+            'DATA QUALITY & STATISTICS': [
+                'nta_average_number_of_particles', 'nta_number_of_traces_sum', 
+                'nta_scattering_intensity'
+            ],
+            'QUALITY CONTROL': [
+                'nta_particle_drift_check_result', 'nta_cell_check_result'
+            ],
+            'FILE REFERENCES': [
+                'meta_version', 'python_analysis'
+            ]
+        }
         
+        # Build ordered list matching sections
+        metadata_rows = []
+        for section_name, field_names in sections.items():
+            for field_name in field_names:
+                if field_name in metadata:
+                    metadata_rows.append({'Field': field_name, 'Value': metadata[field_name]})
+        
+        metadata_df = pd.DataFrame(metadata_rows)
         st.dataframe(metadata_df, use_container_width=True, hide_index=True)
     
     # TAB 3: Warnings & Discrepancies
@@ -207,6 +247,7 @@ if st.session_state.results:
         try:
             created_files = st.session_state.analyzer.save_outputs(output_dir)
             
+            # Individual download buttons
             for filepath in sorted(created_files):
                 filename = os.path.basename(filepath)
                 with open(filepath, 'r') as f:
@@ -218,6 +259,29 @@ if st.session_state.results:
                     file_name=filename,
                     mime="text/plain"
                 )
+            
+            # Download all as zip
+            st.markdown("---")
+            
+            import zipfile
+            import io
+            
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                for filepath in created_files:
+                    filename = os.path.basename(filepath)
+                    with open(filepath, 'r') as f:
+                        zip_file.writestr(filename, f.read())
+            
+            zip_buffer.seek(0)
+            sample_id = results['metadata'].get('persistentID', 'analysis')
+            
+            st.download_button(
+                label="📦 Download All (ZIP)",
+                data=zip_buffer.getvalue(),
+                file_name=f"{sample_id}_all.zip",
+                mime="application/zip"
+            )
             
         except Exception as e:
             st.error(f"Error: {str(e)}")
