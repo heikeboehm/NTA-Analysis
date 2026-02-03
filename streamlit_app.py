@@ -129,11 +129,10 @@ if st.session_state.results:
     st.header("📊 Analysis Results")
     
     # Tabs for different views
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4 = st.tabs([
         "📈 Distribution Data",
         "🔍 Metadata",
         "⚠️ Warnings",
-        "📋 Details",
         "💾 Download"
     ])
     
@@ -175,28 +174,71 @@ if st.session_state.results:
     with tab2:
         st.subheader("Standardized Metadata")
         
-        # Show key metadata
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write("**Project Information**")
-            project_fields = ['persistentID', 'sample', 'experimenter', 'location', 'project']
-            for field in project_fields:
-                if field in results['metadata']:
-                    st.write(f"- **{field}:** {results['metadata'][field]}")
+        # Define sections in order (same as in save_metadata_file)
+        sections = {
+            'SAMPLE & PROJECT INFORMATION': [
+                'persistentID', 'sample', 'electrolyte', 'date', 'num_replicates'
+            ],
+            'EXPERIMENTER & LOCATION': [
+                'experimenter', 'location', 'project', 'pi', 'funding'
+            ],
+            'INSTRUMENT & METHOD': [
+                'data_collection_method', 'nta_instrument', 'nta_software'
+            ],
+            'MEASUREMENT CONDITIONS': [
+                'nta_temperature', 'nta_ph', 'nta_conductivity', 
+                'nta_dilution', 'nta_viscosity'
+            ],
+            'MEASUREMENT PARAMETERS': [
+                'nta_laser_wavelength', 'nta_positions', 'nta_cycles', 'nta_fps'
+            ],
+            'DATA QUALITY & STATISTICS': [
+                'nta_average_number_of_particles', 'nta_number_of_traces_sum', 
+                'nta_scattering_intensity'
+            ],
+            'QUALITY CONTROL': [
+                'nta_particle_drift_check_result', 'nta_cell_check_result'
+            ],
+            'FILE REFERENCES': [
+                'meta_version', 'python_analysis'
+            ]
+        }
         
-        with col2:
-            st.write("**NTA Parameters**")
-            nta_fields = [k for k in results['metadata'].keys() if k.startswith('nta_')]
-            for field in sorted(nta_fields)[:5]:
-                st.write(f"- **{field}:** {results['metadata'][field]}")
+        # Display organized metadata
+        metadata = results['metadata']
         
-        # Full metadata table
-        st.subheader("All Metadata Fields")
-        metadata_df = pd.DataFrame(
-            list(results['metadata'].items()),
-            columns=['Field', 'Value']
-        )
-        st.dataframe(metadata_df, use_container_width=True)
+        # Get concerning fields for highlighting
+        concerning_fields = set()
+        for alert in results['quality_alerts']:
+            if 'particle_drift_check_result' in alert:
+                concerning_fields.add('nta_particle_drift_check_result')
+        for variation in results['high_variation_fields']:
+            field_name = variation.split(':')[0]
+            if field_name.startswith('nta_'):
+                concerning_fields.add(field_name)
+        
+        for section_name, field_names in sections.items():
+            with st.expander(f"**{section_name}**", expanded=(section_name == 'SAMPLE & PROJECT INFORMATION')):
+                section_data = []
+                for field_name in field_names:
+                    if field_name in metadata:
+                        value = metadata[field_name]
+                        # Flag concerning values
+                        if field_name in concerning_fields:
+                            flag = "🚨"
+                        else:
+                            flag = ""
+                        section_data.append({
+                            '': flag,
+                            'Field': field_name,
+                            'Value': value
+                        })
+                
+                if section_data:
+                    df = pd.DataFrame(section_data)
+                    st.dataframe(df, use_container_width=True, hide_index=True)
+                else:
+                    st.write("*No fields in this section*")
     
     # TAB 3: Warnings & Discrepancies
     with tab3:
@@ -230,46 +272,8 @@ if st.session_state.results:
                     st.write(f"- {field}")
                 st.write("**Recommendation:** Check sample consistency, mixing, and instrument stability.")
     
-    # TAB 4: Details
+    # TAB 4: Download
     with tab4:
-        st.subheader("Detailed Analysis Information")
-        
-        # File processing summary
-        st.write("**File Processing Summary**")
-        st.write(f"- Files processed successfully: {results['num_replicates']}")
-        if results['failed_files']:
-            st.write(f"- Files with errors: {len(results['failed_files'])}")
-            for filename, error in results['failed_files'].items():
-                st.write(f"  - {filename}: {error}")
-        
-        # Field analysis
-        st.write("**Field Analysis**")
-        field_analysis = results['field_analysis']
-        
-        analysis_summary = {
-            'Identical': len(results['identical_fields']),
-            'Different': len(results['different_fields']),
-            'Total': len(field_analysis)
-        }
-        
-        analysis_df = pd.DataFrame(
-            list(analysis_summary.items()),
-            columns=['Status', 'Count']
-        )
-        st.dataframe(analysis_df, use_container_width=True)
-        
-        # All files' metadata comparison
-        st.subheader("Per-File Metadata Extraction")
-        for filename, metadata in results['all_file_metadata'].items():
-            with st.expander(f"📄 {filename}"):
-                meta_df = pd.DataFrame(
-                    list(metadata.items()),
-                    columns=['Field', 'Value']
-                )
-                st.dataframe(meta_df, use_container_width=True)
-    
-    # TAB 5: Download
-    with tab5:
         st.subheader("💾 Download Results")
         
         # Scale selection guide
