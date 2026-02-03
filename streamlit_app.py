@@ -82,6 +82,11 @@ with st.sidebar:
         CONFIG["manual_persistent_id"] = manual_persistent_id
     
     st.info("ℹ️ Configuration changes apply when you click 'Analyze Files'")
+    
+    # Reset button
+    if st.button("🔄 Reset All"):
+        st.session_state.clear()
+        st.rerun()
 
 # Main content
 st.header("📤 Upload NTA Files")
