@@ -87,13 +87,6 @@ uploaded_files = st.file_uploader(
 )
 
 if uploaded_files:
-    st.write(f"✓ {len(uploaded_files)} file(s) selected")
-    
-    # Show file list
-    with st.expander("📋 File List", expanded=True):
-        for i, file in enumerate(uploaded_files, 1):
-            st.write(f"{i}. {file.name}")
-    
     if st.button("🔍 Analyze Files", key="analyze_btn", type="primary"):
         with st.spinner("Processing files..."):
             try:
@@ -115,7 +108,7 @@ if uploaded_files:
                     st.session_state.analyzer = analyzer
                     st.session_state.results = results
                 
-                st.success("✅ Analysis completed successfully!")
+                st.success("✅ Analysis completed!")
                 
             except Exception as e:
                 st.error(f"❌ Error during analysis: {str(e)}")
@@ -138,107 +131,40 @@ if st.session_state.results:
     
     # TAB 1: Distribution Data
     with tab1:
-        st.subheader("Particle Size Distribution")
+        st.subheader("Distribution Data")
         
-        # Calculate quality status
-        quality_status = "✓ GOOD"
-        if results['quality_alerts']:
-            quality_status = "❌ POOR"
-        elif results['high_variation_fields']:
-            quality_status = "⚠️ FAIR"
-        
-        # Get detected traces from metadata
-        detected_traces = results['metadata'].get('nta_number_of_traces_sum', 'N/A')
-        
-        # Key statistics
+        # Show metrics
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Files Processed", results['num_replicates'])
+            st.metric("Files", results['num_replicates'])
         with col2:
-            st.metric("Detected Traces", detected_traces)
+            st.metric("Traces", results['metadata'].get('nta_number_of_traces_sum', 'N/A'))
         with col3:
-            st.metric("Quality Status", quality_status)
+            if results['quality_alerts']:
+                st.metric("Alert", "High drift")
+            elif results['high_variation_fields']:
+                st.metric("Status", "High variation")
+            else:
+                st.metric("Status", "✓ Good")
         
-        # Distribution preview
-        st.subheader("Distribution Data Preview")
-        st.dataframe(results['distribution'].head(10), use_container_width=True)
-        
-        # Show statistics by scale
-        st.subheader("Statistics by Scale")
-        for scale in ['linear', 'logarithmic']:
-            scale_data = results['distribution'][results['distribution']['scale'] == scale]
-            if not scale_data.empty:
-                st.write(f"**{scale.capitalize()} Scale:** {len(scale_data)} bins")
+        # Show first 9 rows of linear data
+        st.subheader("Data Preview (Linear)")
+        linear_data = results['distribution'][results['distribution']['scale'] == 'linear']
+        st.dataframe(linear_data.head(9), use_container_width=True)
     
     # TAB 2: Metadata
     with tab2:
-        st.subheader("Standardized Metadata")
+        st.subheader("Metadata")
         
-        # Define sections in order (same as in save_metadata_file)
-        sections = {
-            'SAMPLE & PROJECT INFORMATION': [
-                'persistentID', 'sample', 'electrolyte', 'date', 'num_replicates'
-            ],
-            'EXPERIMENTER & LOCATION': [
-                'experimenter', 'location', 'project', 'pi', 'funding'
-            ],
-            'INSTRUMENT & METHOD': [
-                'data_collection_method', 'nta_instrument', 'nta_software'
-            ],
-            'MEASUREMENT CONDITIONS': [
-                'nta_temperature', 'nta_ph', 'nta_conductivity', 
-                'nta_dilution', 'nta_viscosity'
-            ],
-            'MEASUREMENT PARAMETERS': [
-                'nta_laser_wavelength', 'nta_positions', 'nta_cycles', 'nta_fps'
-            ],
-            'DATA QUALITY & STATISTICS': [
-                'nta_average_number_of_particles', 'nta_number_of_traces_sum', 
-                'nta_scattering_intensity'
-            ],
-            'QUALITY CONTROL': [
-                'nta_particle_drift_check_result', 'nta_cell_check_result'
-            ],
-            'FILE REFERENCES': [
-                'meta_version', 'python_analysis'
-            ]
-        }
-        
-        # Display organized metadata
         metadata = results['metadata']
         
-        # Get concerning fields for highlighting
-        concerning_fields = set()
-        for alert in results['quality_alerts']:
-            if 'particle_drift_check_result' in alert:
-                concerning_fields.add('nta_particle_drift_check_result')
-        for variation in results['high_variation_fields']:
-            field_name = variation.split(':')[0]
-            if field_name.startswith('nta_'):
-                concerning_fields.add(field_name)
+        # Simple table of all metadata
+        metadata_df = pd.DataFrame([
+            {'Field': k, 'Value': v} 
+            for k, v in sorted(metadata.items())
+        ])
         
-        for section_name, field_names in sections.items():
-            with st.expander(f"**{section_name}**", expanded=(section_name == 'SAMPLE & PROJECT INFORMATION')):
-                section_data = []
-                for field_name in field_names:
-                    if field_name in metadata:
-                        value = metadata[field_name]
-                        # Flag concerning values
-                        if field_name in concerning_fields:
-                            flag = "🚨"
-                        else:
-                            flag = ""
-                        section_data.append({
-                            '': flag,
-                            'Field': field_name,
-                            'Value': value
-                        })
-                
-                if section_data:
-                    df = pd.DataFrame(section_data)
-                    st.dataframe(df, use_container_width=True, hide_index=True)
-                else:
-                    st.write("*No fields in this section*")
+        st.dataframe(metadata_df, use_container_width=True, hide_index=True)
     
     # TAB 3: Warnings & Discrepancies
     with tab3:
@@ -274,128 +200,29 @@ if st.session_state.results:
     
     # TAB 4: Download
     with tab4:
-        st.subheader("💾 Download Results")
+        st.subheader("Download")
         
-        # Scale selection guide
-        st.info("""
-        **📊 How to choose your scale:**
-        
-        - **LINEAR Scale**: Use when plotting with equal-width bins on X-axis
-          - Best for: Statistical analysis, focus on small particles
-          - When: Creating your own plots in spreadsheet/Python
-        
-        - **LOGARITHMIC Scale**: Use when plotting with log-spaced bins on X-axis  
-          - Best for: Publication plots, wide size ranges, log-normal distributions
-          - When: Standard choice for most applications
-        
-        👉 **Not sure?** Start with **LOGARITHMIC** - it's the publication standard.
-        """)
-        
-        st.markdown("---")
-        
-        # Create output directory
         output_dir = tempfile.mkdtemp()
         
-        # Save outputs
         try:
             created_files = st.session_state.analyzer.save_outputs(output_dir)
             
-            # Organize files by type
-            metadata_files = [f for f in created_files if 'metadata' in f.lower()]
-            distribution_files = [f for f in created_files if 'psd' in f.lower()]
-            
-            if distribution_files:
-                st.subheader("📈 Distribution Data Files (by Scale)")
-                st.write("Choose the scale appropriate for your analysis:")
+            for filepath in sorted(created_files):
+                filename = os.path.basename(filepath)
+                with open(filepath, 'r') as f:
+                    file_content = f.read()
                 
-                for filepath in sorted(distribution_files):
-                    filename = os.path.basename(filepath)
-                    with open(filepath, 'r') as f:
-                        file_content = f.read()
-                    
-                    # Show which scale this is
-                    if 'LINEAR' in filename:
-                        scale_label = "📊 LINEAR Scale"
-                        scale_desc = "Equal bin widths on X-axis"
-                    else:
-                        scale_label = "📈 LOGARITHMIC Scale ⭐ Recommended"
-                        scale_desc = "Equal spacing in log space - standard for publication"
-                    
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.write(f"**{scale_label}**")
-                        st.caption(scale_desc)
-                    with col2:
-                        st.download_button(
-                            label="📥 Download",
-                            data=file_content,
-                            file_name=filename,
-                            mime="text/plain",
-                            key=f"download_{filename}"
-                        )
-                    
-                    # Show file preview
-                    with st.expander(f"👁️ Preview: {filename}"):
-                        # Show first few lines with header info
-                        preview_lines = file_content.split('\n')[:12]
-                        st.code('\n'.join(preview_lines), language='text')
-            
-            if metadata_files:
-                st.subheader("📋 Metadata File")
-                
-                for filepath in metadata_files:
-                    filename = os.path.basename(filepath)
-                    with open(filepath, 'r') as f:
-                        file_content = f.read()
-                    
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.write(f"**{filename}**")
-                        st.caption("Standardized metadata with extraction notes")
-                    with col2:
-                        st.download_button(
-                            label="📥 Download",
-                            data=file_content,
-                            file_name=filename,
-                            mime="text/plain",
-                            key=f"download_meta_{filename}"
-                        )
-            
-            st.markdown("---")
-            st.subheader("📦 Alternative Formats (for reference)")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Combined distribution as CSV (for reference)
-                dist_csv = results['distribution'].to_csv(index=False)
                 st.download_button(
-                    label="📥 All Data Combined (CSV)",
-                    data=dist_csv,
-                    file_name=f"{results['metadata'].get('persistentID', 'analysis')}_distribution_combined.csv",
-                    mime="text/csv",
-                    help="Contains both LINEAR and LOGARITHMIC data in one file"
+                    label=f"📥 {filename}",
+                    data=file_content,
+                    file_name=filename,
+                    mime="text/plain"
                 )
-            
-            with col2:
-                # Metadata as JSON
-                metadata_json = pd.DataFrame(
-                    list(results['metadata'].items()),
-                    columns=['Field', 'Value']
-                ).to_json(orient='records', indent=2)
-                st.download_button(
-                    label="📥 Metadata (JSON)",
-                    data=metadata_json,
-                    file_name=f"{results['metadata'].get('persistentID', 'analysis')}_metadata.json",
-                    mime="application/json"
-                )
-            
-            st.success("✅ All files ready for download")
             
         except Exception as e:
-            st.error(f"Error preparing downloads: {str(e)}")
+            st.error(f"Error: {str(e)}")
 else:
-    st.info("👆 Upload NTA files and click 'Analyze Files' to begin")
+    st.info("Upload NTA files and click 'Analyze Files'")
 
 st.markdown("---")
-st.markdown("**NTA Analysis App** | Cells 01-04 Integrated | © 2025")
+st.markdown("**NTA Analysis** | Cells 01-04")

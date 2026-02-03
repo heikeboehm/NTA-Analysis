@@ -1020,21 +1020,9 @@ class NTAAnalyzer:
         if not linear_data.empty:
             linear_path = os.path.join(output_dir, f'Data_{unique_id}_PSD_LINEAR.txt')
             
-            # Add informative header
-            with open(linear_path, 'w') as f:
-                f.write("# PARTICLE SIZE DISTRIBUTION - LINEAR SCALE\n")
-                f.write("# Use this file when plotting data on LINEAR X-axis\n")
-                f.write("# Good for: Equal bin widths, small particles, statistical tests\n")
-                f.write("#\n")
-                f.write(f"# Sample: {self.results['metadata'].get('sample', 'Unknown')}\n")
-                f.write(f"# Replicates: {self.results['num_replicates']}\n")
-                f.write(f"# Data points: {len(linear_data)}\n")
-                f.write("#\n")
-            
-            # Append data
+            # Save data without headers
             linear_data_export = linear_data.drop('scale', axis=1)
-            with open(linear_path, 'a') as f:
-                linear_data_export.to_csv(f, sep='\t', index=False)
+            linear_data_export.to_csv(linear_path, sep='\t', index=False)
             
             created_files.append(linear_path)
         
@@ -1043,21 +1031,9 @@ class NTAAnalyzer:
         if not log_data.empty:
             log_path = os.path.join(output_dir, f'Data_{unique_id}_PSD_LOGARITHMIC.txt')
             
-            # Add informative header
-            with open(log_path, 'w') as f:
-                f.write("# PARTICLE SIZE DISTRIBUTION - LOGARITHMIC SCALE\n")
-                f.write("# Use this file when plotting data on LOGARITHMIC X-axis\n")
-                f.write("# Good for: Wide size ranges, log-normal distributions, publication plots\n")
-                f.write("#\n")
-                f.write(f"# Sample: {self.results['metadata'].get('sample', 'Unknown')}\n")
-                f.write(f"# Replicates: {self.results['num_replicates']}\n")
-                f.write(f"# Data points: {len(log_data)}\n")
-                f.write("#\n")
-            
-            # Append data
+            # Save data without headers
             log_data_export = log_data.drop('scale', axis=1)
-            with open(log_path, 'a') as f:
-                log_data_export.to_csv(f, sep='\t', index=False)
+            log_data_export.to_csv(log_path, sep='\t', index=False)
             
             created_files.append(log_path)
         
