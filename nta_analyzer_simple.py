@@ -231,7 +231,8 @@ def normalize_distribution(df):
         numbers = df['Number'].values
         
         # Trapezoidal integration
-        integral = np.trapz(numbers, sizes)
+        from scipy.integrate import trapezoid
+        integral = trapezoid(numbers, sizes)
         
         if integral > 0:
             df['Number_normalized'] = numbers / integral
