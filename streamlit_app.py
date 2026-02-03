@@ -120,6 +120,9 @@ if uploaded_files:
             # Process files
             results = analyzer.process(temp_files, metadata_overrides)
             
+            # Generate plot to get D-values
+            fig = analyzer.get_plot()
+            
             st.success("✅ Analysis complete!")
         
         # ====================================================================
@@ -152,24 +155,28 @@ if uploaded_files:
         # Generate and display plot
         st.subheader("📊 Linear Number-Weighted Distribution")
         
-        plot_description = """
-        **Number-Weighted Distribution (Linear Scale)**
-        
-        - **Top panel:** Shows the normalized particle count distribution across size bins
-        - **Red curve:** Fitted lognormal distribution
-        - **Shaded area:** Uncertainty range (±1 SD from averaging)
-        - **Bottom panel:** Cumulative distribution with uncertainty bounds
-        - **Red dashed line:** D50 (median particle size where 50% of particles are smaller)
-        
-        💡 **Use this plot when:** You want to understand the overall shape and median size of your particle population
-        """
-        
-        with st.expander("ℹ️ How to interpret this plot", expanded=False):
-            st.markdown(plot_description)
-        
         try:
             fig = analyzer.get_plot()
             st.pyplot(fig)
+            
+            # Display D-values from analyzer results
+            if 'd_values' in analyzer.results:
+                st.divider()
+                col1, col2, col3 = st.columns(3)
+                
+                d_values = analyzer.results['d_values']
+                
+                with col1:
+                    st.metric("D10 (nm)", f"{d_values.get('D10', 0):.1f}")
+                
+                with col2:
+                    st.metric("D50 (nm)", f"{d_values.get('D50', 0):.1f}")
+                
+                with col3:
+                    st.metric("D90 (nm)", f"{d_values.get('D90', 0):.1f}")
+                
+                st.caption("D-values represent the size where 10%, 50%, and 90% of particles are smaller")
+        
         except Exception as e:
             st.error(f"Error generating plot: {str(e)}")
         

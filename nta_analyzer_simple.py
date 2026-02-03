@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import LogFormatter
 
 from scipy.optimize import curve_fit
+from scipy.integrate import trapezoid
 
 
 # ============================================================================
@@ -231,7 +232,6 @@ def normalize_distribution(df):
         numbers = df['Number'].values
         
         # Trapezoidal integration
-        from scipy.integrate import trapezoid
         integral = trapezoid(numbers, sizes)
         
         if integral > 0:
@@ -293,54 +293,145 @@ def fit_lognormal(sizes, numbers):
         return None
 
 
-def create_linear_number_plot(df, figsize=(12, 8)):
-    """Create linear scale number-weighted distribution plot."""
+def calculate_d_values(df):
+    """Calculate D10, D50, D90 from cumulative distribution."""
+    if 'Number_cumulative' not in df.columns:
+        return {}, {}
     
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize, sharex=True)
+    sizes = df['Size / nm'].values
+    cum = df['Number_cumulative'].values
+    
+    # Normalize cumulative to 0-1
+    if cum[-1] > 0:
+        cum_norm = cum / cum[-1]
+    else:
+        return {}, {}
+    
+    cum_std = np.zeros_like(cum)
+    if 'Number_cumulative_std' in df.columns:
+        cum_std = df['Number_cumulative_std'].values / cum[-1]
+    
+    d_values = {}
+    d_bounds = {}
+    
+    for percentile, target in [(10, 0.1), (50, 0.5), (90, 0.9)]:
+        # Find D value
+        idx = np.argmin(np.abs(cum_norm - target))
+        d_val = sizes[idx]
+        
+        # Find bounds using ±1 SD
+        cum_upper = cum_norm + cum_std
+        cum_lower = np.maximum(cum_norm - cum_std, 0)
+        
+        idx_upper = np.argmin(np.abs(cum_upper - target))
+        idx_lower = np.argmin(np.abs(cum_lower - target))
+        
+        d_upper = sizes[idx_upper]
+        d_lower = sizes[idx_lower]
+        
+        d_values[f'D{percentile}'] = d_val
+        d_bounds[f'D{percentile}'] = (d_lower, d_upper)
+    
+    return d_values, d_bounds
+
+
+def create_linear_number_plot(df, figsize=(14, 10)):
+    """Create professional publication-ready linear number-weighted distribution plot."""
     
     if 'Size / nm' not in df.columns or 'Number_normalized' not in df.columns:
-        raise Exception("Required columns not found in distribution data")
+        raise Exception("Required columns not found")
+    
+    # Calculate D-values
+    d_values, d_bounds = calculate_d_values(df)
+    
+    # Create figure with 2 subplots
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize, sharex=True)
     
     sizes = df['Size / nm'].values
     numbers_norm = df['Number_normalized'].values
+    numbers_std = df['Number_normalized_std'].values if 'Number_normalized_std' in df.columns else np.zeros_like(numbers_norm)
     
-    # Plot 1: Distribution
-    ax1.bar(sizes, numbers_norm, width=np.diff(sizes).mean(), alpha=0.6, label='Number distribution')
+    # ========== SUBPLOT 1: DISTRIBUTION WITH FIT ==========
     
-    # Try lognormal fit
+    # Plot histogram
+    width = np.diff(sizes).mean()
+    ax1.bar(sizes, numbers_norm, width=width, alpha=0.65, color='#0173B2', 
+            edgecolor='#0173B2', linewidth=0.5, label='Number Distribution')
+    
+    # Add uncertainty band
+    ax1.fill_between(sizes, numbers_norm - numbers_std, numbers_norm + numbers_std, 
+                     alpha=0.25, color='#0173B2', label='±1 SD')
+    
+    # Fit and plot lognormal curve
     fit_popt = fit_lognormal(sizes, numbers_norm)
     if fit_popt is not None:
-        sizes_fit = np.linspace(sizes.min(), sizes.max(), 500)
-        fit_curve = lognormal_pdf(sizes_fit, *fit_popt)
-        ax1.plot(sizes_fit, fit_curve, 'r-', linewidth=2, label='Lognormal fit')
+        sizes_smooth = np.linspace(sizes.min(), sizes.max(), 500)
+        fit_curve = lognormal_pdf(sizes_smooth, *fit_popt)
+        ax1.plot(sizes_smooth, fit_curve, color='#DE8F05', linewidth=2.5, 
+                label='Lognormal Fit', zorder=5)
     
-    if 'Number_normalized_std' in df.columns:
-        stds = df['Number_normalized_std'].values
-        ax1.fill_between(sizes, numbers_norm - stds, numbers_norm + stds, alpha=0.3)
+    ax1.set_ylabel('Normalized Number Distribution', fontsize=12, fontweight='bold')
+    ax1.set_title('Linear Scale - Number-Weighted Particle Size Distribution', 
+                 fontsize=13, fontweight='bold', pad=15)
+    ax1.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
+    ax1.legend(loc='upper right', fontsize=10, framealpha=0.95)
+    ax1.set_xlim([sizes.min(), sizes.max()])
     
-    ax1.set_ylabel('Normalized Number Distribution', fontsize=11)
-    ax1.set_title('Linear Scale - Number-Weighted Particle Size Distribution', fontsize=12, fontweight='bold')
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
+    # ========== SUBPLOT 2: CUMULATIVE DISTRIBUTION ==========
     
-    # Plot 2: Cumulative
     if 'Number_cumulative' in df.columns:
         cum = df['Number_cumulative'].values
-        ax2.plot(sizes, cum, 'b-', linewidth=2, label='Cumulative')
+        cum_max = cum[-1]
         
-        if 'Number_cumulative_std' in df.columns:
-            cum_std = df['Number_cumulative_std'].values
-            ax2.fill_between(sizes, cum - cum_std, cum + cum_std, alpha=0.3, label='±1 SD')
+        if cum_max > 0:
+            cum_norm = cum / cum_max
+            cum_std = np.zeros_like(cum)
+            
+            if 'Number_cumulative_std' in df.columns:
+                cum_std = df['Number_cumulative_std'].values / cum_max
+            
+            # Plot cumulative
+            ax2.plot(sizes, cum_norm, color='#029E73', linewidth=2.5, label='Cumulative Distribution')
+            
+            # Add uncertainty band
+            ax2.fill_between(sizes, np.maximum(cum_norm - cum_std, 0), 
+                           np.minimum(cum_norm + cum_std, 1), 
+                           alpha=0.2, color='#029E73', label='±1 SD')
+            
+            # Add D-value reference lines and bands
+            colors = {'D10': '#CC78BC', 'D50': '#CA0020', 'D90': '#009ACD'}
+            
+            for d_name, d_val in d_values.items():
+                if d_val > 0:
+                    # Main line
+                    target = float(d_name[1:]) / 100.0
+                    ax2.axvline(d_val, color=colors[d_name], linestyle='--', 
+                               linewidth=1.5, alpha=0.7, zorder=3)
+                    
+                    # Horizontal line at percentile
+                    ax2.axhline(target, color=colors[d_name], linestyle=':', 
+                               linewidth=1, alpha=0.4)
+                    
+                    # Add label
+                    ax2.text(d_val, target + 0.05, f'{d_name}\n{d_val:.1f} nm', 
+                            ha='center', fontsize=9, color=colors[d_name],
+                            fontweight='bold', bbox=dict(boxstyle='round,pad=0.3', 
+                            facecolor='white', edgecolor=colors[d_name], alpha=0.8))
         
-        ax2.axhline(y=0.5, color='r', linestyle='--', alpha=0.5, label='D50')
-        ax2.set_ylabel('Cumulative Distribution', fontsize=11)
-        ax2.set_xlabel('Size (nm)', fontsize=11)
-        ax2.legend()
-        ax2.grid(True, alpha=0.3)
+        ax2.set_ylabel('Cumulative Distribution', fontsize=12, fontweight='bold')
+        ax2.set_xlabel('Size (nm)', fontsize=12, fontweight='bold')
         ax2.set_ylim([0, 1.05])
+        ax2.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
+        ax2.legend(loc='lower right', fontsize=10, framealpha=0.95)
+    
+    # Overall styling
+    for ax in [ax1, ax2]:
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.tick_params(labelsize=10)
     
     plt.tight_layout()
-    return fig
+    return fig, d_values
 
 
 # ============================================================================
@@ -385,7 +476,9 @@ class NTAAnalyzer:
         if 'distribution' not in self.results:
             raise Exception("No results. Run process() first.")
         
-        return create_linear_number_plot(self.results['distribution'])
+        fig, d_values = create_linear_number_plot(self.results['distribution'])
+        self.results['d_values'] = d_values
+        return fig
     
     def save_outputs(self, output_dir):
         """Save all outputs."""
@@ -416,13 +509,23 @@ class NTAAnalyzer:
         # Save basic stats
         stats_path = os.path.join(output_dir, f'Stats_{unique_id}.txt')
         with open(stats_path, 'w') as f:
+            f.write("=== PARTICLE SIZE DISTRIBUTION STATISTICS ===\n\n")
+            
+            # D-values from plot calculation
+            if 'd_values' in self.results:
+                f.write("D-VALUE STATISTICS (nm):\n")
+                for d_name in ['D10', 'D50', 'D90']:
+                    if d_name in self.results['d_values']:
+                        d_val = self.results['d_values'][d_name]
+                        f.write(f"  {d_name}: {d_val:.2f}\n")
+                f.write("\n")
+            
+            # Basic distribution stats
+            f.write("DISTRIBUTION SUMMARY:\n")
             dist = self.results['distribution']
-            if 'Number_cumulative' in dist.columns:
-                # Find D50 (median)
-                cum = dist['Number_cumulative'].values
-                idx = np.argmin(np.abs(cum - 0.5))
-                d50 = dist['Size / nm'].values[idx]
-                f.write(f"D50 (nm): {d50:.2f}\n")
+            f.write(f"  Size range: {dist['Size / nm'].min():.2f} - {dist['Size / nm'].max():.2f} nm\n")
+            f.write(f"  Number of files: {self.results['metadata'].get('num_files', 1)}\n")
+            f.write(f"  Dilution factor: {self.results['metadata'].get('dilution_factor', 1):.1f}\n")
         created_files.append(stats_path)
         
         return created_files
