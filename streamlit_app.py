@@ -1,329 +1,337 @@
 """
-NTA Data Analysis - Streamlit Web App
-
-Interactive web interface for particle size distribution analysis.
-Users can upload files, adjust parameters, and download results.
+NTA Data Analysis - Streamlit Web Application
+Updated to use combined analyzer with Cells 01-04
+Includes metadata discrepancy detection and warnings
 """
 
 import streamlit as st
-import os
+import pandas as pd
+import io
 import tempfile
-import shutil
-import zipfile
-from io import BytesIO
+import os
+from nta_analyzer_cells_01_04 import NTAAnalyzer, CONFIG
 
-from nta_analyzer_simple import NTAAnalyzer
-
-# ============================================================================
-# PAGE CONFIGURATION
-# ============================================================================
-
+# Set page config
 st.set_page_config(
-    page_title="NTA Data Analysis",
-    page_icon="🔬",
+    page_title="NTA Analysis",
+    page_icon="🧪",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-st.title("🔬 NTA Particle Size Distribution Analysis")
-st.markdown("""
-Analyze Nanoparticle Tracking Analysis (NTA) data from ZetaView instruments.
-Upload your data files and get instant analysis with plots and statistics.
-""")
+st.title("🧪 NTA Particle Size Analysis")
+st.markdown("---")
 
-# ============================================================================
-# SIDEBAR - CONFIGURATION
-# ============================================================================
+# Initialize session state
+if 'analyzer' not in st.session_state:
+    st.session_state.analyzer = None
+if 'results' not in st.session_state:
+    st.session_state.results = None
 
-st.sidebar.header("Configuration Parameters")
-
-with st.sidebar.expander("📋 Metadata Fields", expanded=True):
-    experimenter = st.text_input(
-        "Experimenter Initials",
-        value="HB",
-        help="Your name or initials"
-    )
+# Sidebar configuration
+with st.sidebar:
+    st.header("⚙️ Configuration")
     
+    st.subheader("Project Information")
+    experimenter = st.text_input(
+        "Experimenter",
+        value=CONFIG["project_metadata"]["experimenter"],
+        help="Your initials or name"
+    )
     location = st.text_input(
         "Lab Location",
-        value="MPI-CBP",
-        help="Where the analysis was performed"
+        value=CONFIG["project_metadata"]["location"],
+        help="Where the analysis is performed"
     )
-    
     project = st.text_input(
         "Project Name",
-        value="NTA_Analysis",
-        help="Project or sample name"
+        value=CONFIG["project_metadata"]["project"],
+        help="Your project name"
     )
-
-with st.sidebar.expander("⚙️ Analysis Parameters", expanded=True):
-    dilution = st.number_input(
-        "Dilution Factor",
-        value=1000.0,
-        min_value=1.0,
-        help="Sample dilution factor applied during measurement"
-    )
-
-# ============================================================================
-# MAIN CONTENT - FILE UPLOAD
-# ============================================================================
-
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    st.subheader("📁 Upload NTA Data Files")
-    st.info("ℹ️ You can upload one or multiple .txt files from ZetaView for replicate analysis")
     
-    uploaded_files = st.file_uploader(
-        "Choose NTA data files",
-        type="txt",
-        accept_multiple_files=True,
-        key="file_uploader"
-    )
+    # Update CONFIG with user values
+    CONFIG["project_metadata"]["experimenter"] = experimenter
+    CONFIG["project_metadata"]["location"] = location
+    CONFIG["project_metadata"]["project"] = project
 
-with col2:
-    st.subheader("📊 Analysis Type")
-    st.metric("Files Selected", len(uploaded_files) if uploaded_files else 0)
+# Main content
+st.header("📤 Upload NTA Files")
+st.markdown("Upload one or more NTA data files (.txt format)")
 
-# ============================================================================
-# PROCESSING & ANALYSIS
-# ============================================================================
+uploaded_files = st.file_uploader(
+    "Choose NTA files",
+    type="txt",
+    accept_multiple_files=True,
+    help="Select one or more NTA data files for analysis"
+)
 
 if uploaded_files:
+    st.write(f"✓ {len(uploaded_files)} file(s) selected")
     
-    # Create temporary directory for uploaded files
-    temp_dir = tempfile.mkdtemp()
-    temp_files = []
+    # Show file list
+    with st.expander("📋 File List", expanded=True):
+        for i, file in enumerate(uploaded_files, 1):
+            st.write(f"{i}. {file.name}")
     
-    try:
-        # Save uploaded files
-        for uploaded_file in uploaded_files:
-            file_path = os.path.join(temp_dir, uploaded_file.name)
-            with open(file_path, 'wb') as f:
-                f.write(uploaded_file.getbuffer())
-            temp_files.append(file_path)
+    if st.button("🔍 Analyze Files", key="analyze_btn", type="primary"):
+        with st.spinner("Processing files..."):
+            try:
+                # Create temp directory
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    # Save uploaded files to temp directory
+                    temp_files = []
+                    for uploaded_file in uploaded_files:
+                        temp_path = os.path.join(temp_dir, uploaded_file.name)
+                        with open(temp_path, 'wb') as f:
+                            f.write(uploaded_file.getbuffer())
+                        temp_files.append(temp_path)
+                    
+                    # Run analysis
+                    analyzer = NTAAnalyzer(config=CONFIG)
+                    results = analyzer.process(temp_files)
+                    
+                    # Store in session state
+                    st.session_state.analyzer = analyzer
+                    st.session_state.results = results
+                
+                st.success("✅ Analysis completed successfully!")
+                
+            except Exception as e:
+                st.error(f"❌ Error during analysis: {str(e)}")
+                st.stop()
+
+# Display results if analysis was successful
+if st.session_state.results:
+    results = st.session_state.results
+    
+    st.markdown("---")
+    st.header("📊 Analysis Results")
+    
+    # Tabs for different views
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📈 Distribution Data",
+        "🔍 Metadata",
+        "⚠️ Discrepancies",
+        "📋 Details",
+        "💾 Download"
+    ])
+    
+    # TAB 1: Distribution Data
+    with tab1:
+        st.subheader("Particle Size Distribution")
         
-        # Show processing status
-        with st.spinner("🔄 Processing files..."):
-            
-            # Initialize analyzer
-            analyzer = NTAAnalyzer()
-            
-            # Prepare metadata overrides
-            metadata_overrides = {
-                'experimenter': experimenter,
-                'location': location,
-                'project': project,
-                'dilution_factor': dilution
-            }
-            
-            # Process files
-            results = analyzer.process(temp_files, metadata_overrides)
-            
-            # Generate plot to get D-values
-            fig = analyzer.get_plot()
-            
-            st.success("✅ Analysis complete!")
+        # Key statistics
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Files Processed", results['num_replicates'])
+        with col2:
+            st.metric("Size Bins", len(results['distribution']))
+        with col3:
+            st.metric("Size Range", f"{results['distribution']['size_nm'].min():.1f} - {results['distribution']['size_nm'].max():.0f} nm")
+        with col4:
+            st.metric("Scales", f"{results['distribution']['scale'].nunique()}")
         
-        # ====================================================================
-        # RESULTS DISPLAY
-        # ====================================================================
+        # Distribution preview
+        st.subheader("Distribution Data Preview")
+        st.dataframe(results['distribution'].head(10), use_container_width=True)
         
-        st.divider()
-        st.subheader("📈 Results")
+        # Show statistics by scale
+        st.subheader("Statistics by Scale")
+        for scale in ['linear', 'logarithmic']:
+            scale_data = results['distribution'][results['distribution']['scale'] == scale]
+            if not scale_data.empty:
+                st.write(f"**{scale.capitalize()} Scale:** {len(scale_data)} bins")
+    
+    # TAB 2: Metadata
+    with tab2:
+        st.subheader("Standardized Metadata")
         
-        # Display metadata
-        with st.expander("📋 Analysis Information", expanded=False):
-            col1, col2, col3, col4 = st.columns(4)
+        # Show key metadata
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("**Project Information**")
+            project_fields = ['persistentID', 'sample', 'experimenter', 'location', 'project']
+            for field in project_fields:
+                if field in results['metadata']:
+                    st.write(f"- **{field}:** {results['metadata'][field]}")
+        
+        with col2:
+            st.write("**NTA Parameters**")
+            nta_fields = [k for k in results['metadata'].keys() if k.startswith('nta_')]
+            for field in sorted(nta_fields)[:5]:
+                st.write(f"- **{field}:** {results['metadata'][field]}")
+        
+        # Full metadata table
+        st.subheader("All Metadata Fields")
+        metadata_df = pd.DataFrame(
+            list(results['metadata'].items()),
+            columns=['Field', 'Value']
+        )
+        st.dataframe(metadata_df, use_container_width=True)
+    
+    # TAB 3: Metadata Discrepancies & Warnings
+    with tab3:
+        st.subheader("⚠️ Metadata Discrepancies & Quality Alerts")
+        
+        # Quality control alerts
+        if results['quality_alerts']:
+            st.warning("🚨 **Quality Control Alerts Detected**")
+            for alert in results['quality_alerts']:
+                st.write(f"- {alert}")
+        else:
+            st.info("✅ No quality control alerts")
+        
+        # High variation fields
+        if results['high_variation_fields']:
+            st.warning("📊 **High Variation Detected**")
+            for field in results['high_variation_fields']:
+                st.write(f"- {field}")
+        else:
+            st.info("✅ No high variation detected")
+        
+        # Different fields summary
+        if results['different_fields']:
+            st.subheader("Fields with Differences Across Files")
+            st.write(f"**{len(results['different_fields'])} field(s) differ across files**")
             
+            # Show which fields differ
+            col1, col2 = st.columns(2)
             with col1:
-                st.metric("Sample", results['metadata'].get('sample_name', 'N/A'))
+                st.write("**Different Fields:**")
+                for field in sorted(results['different_fields'].keys())[:10]:
+                    values = results['different_fields'][field]
+                    st.write(f"- {field}: {len(set(values))} unique value(s)")
             
             with col2:
-                st.metric("Files Analyzed", results['metadata'].get('num_files', 1))
-            
-            with col3:
-                st.metric("Dilution Factor", f"{results['metadata'].get('dilution_factor', 1):.1f}")
-            
-            with col4:
-                st.metric("Temperature (°C)", f"{results['metadata'].get('temperature', 'N/A')}")
-            
-            st.write("**Full Metadata:**")
-            for key, value in results['metadata'].items():
-                st.write(f"• **{key}:** {value}")
+                st.write("**Identical Fields:**")
+                st.write(f"Total: {len(results['identical_fields'])} field(s)")
+                for field in sorted(results['identical_fields'].keys())[:10]:
+                    st.write(f"- {field}")
+        else:
+            st.info("✅ All extracted fields are identical across files")
         
-        # Generate and display plot
-        st.subheader("📊 Linear Number-Weighted Distribution")
+        # Detailed comparison
+        st.subheader("Detailed Field Comparison")
         
-        try:
-            fig = analyzer.get_plot()
-            st.pyplot(fig)
-            
-            # Display D-values from analyzer results
-            if 'd_values' in analyzer.results:
-                st.divider()
-                col1, col2, col3 = st.columns(3)
-                
-                d_values = analyzer.results['d_values']
-                
-                with col1:
-                    st.metric("D10 (nm)", f"{d_values.get('D10', 0):.1f}")
-                
-                with col2:
-                    st.metric("D50 (nm)", f"{d_values.get('D50', 0):.1f}")
-                
-                with col3:
-                    st.metric("D90 (nm)", f"{d_values.get('D90', 0):.1f}")
-                
-                st.caption("D-values represent the size where 10%, 50%, and 90% of particles are smaller")
-        
-        except Exception as e:
-            st.error(f"Error generating plot: {str(e)}")
-        
-        # Display distribution data table
-        with st.expander("📊 Distribution Data Table", expanded=False):
-            st.dataframe(
-                results['distribution'],
-                use_container_width=True,
-                height=400
+        if results['different_fields']:
+            selected_field = st.selectbox(
+                "Select a field to see values from each file:",
+                sorted(results['different_fields'].keys())
             )
+            
+            if selected_field:
+                values = results['different_fields'][selected_field]
+                filenames = list(results['all_file_metadata'].keys())
+                
+                comparison_data = []
+                for filename, value in zip(filenames, values):
+                    comparison_data.append({
+                        'File': filename,
+                        'Value': value
+                    })
+                
+                comparison_df = pd.DataFrame(comparison_data)
+                st.dataframe(comparison_df, use_container_width=True)
+                
+                # Show explanation
+                unique_values = set(values)
+                if len(unique_values) > 1:
+                    st.info(
+                        f"⚠️ This field has **{len(unique_values)} different value(s)** across files:\n"
+                        f"- {', '.join(str(v) for v in unique_values)}"
+                    )
+    
+    # TAB 4: Details
+    with tab4:
+        st.subheader("Detailed Analysis Information")
         
-        # ====================================================================
-        # DOWNLOAD RESULTS
-        # ====================================================================
+        # File processing summary
+        st.write("**File Processing Summary**")
+        st.write(f"- Files processed successfully: {results['num_replicates']}")
+        if results['failed_files']:
+            st.write(f"- Files with errors: {len(results['failed_files'])}")
+            for filename, error in results['failed_files'].items():
+                st.write(f"  - {filename}: {error}")
         
-        st.divider()
-        st.subheader("⬇️ Download Results")
+        # Field analysis
+        st.write("**Field Analysis**")
+        field_analysis = results['field_analysis']
+        
+        analysis_summary = {
+            'Identical': len(results['identical_fields']),
+            'Different': len(results['different_fields']),
+            'Total': len(field_analysis)
+        }
+        
+        analysis_df = pd.DataFrame(
+            list(analysis_summary.items()),
+            columns=['Status', 'Count']
+        )
+        st.dataframe(analysis_df, use_container_width=True)
+        
+        # All files' metadata comparison
+        st.subheader("Per-File Metadata Extraction")
+        for filename, metadata in results['all_file_metadata'].items():
+            with st.expander(f"📄 {filename}"):
+                meta_df = pd.DataFrame(
+                    list(metadata.items()),
+                    columns=['Field', 'Value']
+                )
+                st.dataframe(meta_df, use_container_width=True)
+    
+    # TAB 5: Download
+    with tab5:
+        st.subheader("💾 Download Results")
         
         # Create output directory
         output_dir = tempfile.mkdtemp()
         
+        # Save outputs
         try:
-            # Save all outputs
-            created_files = analyzer.save_outputs(output_dir)
+            created_files = st.session_state.analyzer.save_outputs(output_dir)
             
-            # Create zip file
-            zip_buffer = BytesIO()
-            unique_id = results['metadata'].get('persistentID', 'analysis')
+            # Create download buttons
+            st.write("**Available files for download:**")
             
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                for file_path in created_files:
-                    arcname = os.path.basename(file_path)
-                    zip_file.write(file_path, arcname=arcname)
+            for filepath in created_files:
+                filename = os.path.basename(filepath)
+                with open(filepath, 'rb') as f:
+                    file_content = f.read()
+                
+                st.download_button(
+                    label=f"📥 Download {filename}",
+                    data=file_content,
+                    file_name=filename,
+                    mime="text/plain"
+                )
             
-            zip_buffer.seek(0)
-            
-            # Download button
+            # Distribution as CSV
+            dist_csv = results['distribution'].to_csv(index=False)
             st.download_button(
-                label="📦 Download All Results (ZIP)",
-                data=zip_buffer.getvalue(),
-                file_name=f"NTA_analysis_{unique_id}.zip",
-                mime="application/zip",
-                help="Contains metadata, distribution data, plots, and statistics"
+                label="📥 Download Distribution Data (CSV)",
+                data=dist_csv,
+                file_name=f"{results['metadata'].get('persistentID', 'analysis')}_distribution.csv",
+                mime="text/csv"
             )
             
-            # Individual file downloads
-            st.write("**Or download individual files:**")
+            # Metadata as JSON
+            metadata_json = pd.DataFrame(
+                list(results['metadata'].items()),
+                columns=['Field', 'Value']
+            ).to_json(orient='records')
+            st.download_button(
+                label="📥 Download Metadata (JSON)",
+                data=metadata_json,
+                file_name=f"{results['metadata'].get('persistentID', 'analysis')}_metadata.json",
+                mime="application/json"
+            )
             
-            col1, col2, col3 = st.columns(3)
+            st.success("✅ All files ready for download")
             
-            for file_path in created_files:
-                filename = os.path.basename(file_path)
-                
-                with open(file_path, 'rb') as f:
-                    file_data = f.read()
-                
-                if 'metadata' in filename:
-                    with col1:
-                        st.download_button(
-                            label="📄 Metadata",
-                            data=file_data,
-                            file_name=filename,
-                            mime="text/plain"
-                        )
-                elif 'Stats' in filename:
-                    with col2:
-                        st.download_button(
-                            label="📊 Statistics",
-                            data=file_data,
-                            file_name=filename,
-                            mime="text/plain"
-                        )
-                elif 'png' in filename or 'pdf' in filename:
-                    with col3:
-                        mime_type = "image/png" if 'png' in filename else "application/pdf"
-                        st.download_button(
-                            label="📈 Plot",
-                            data=file_data,
-                            file_name=filename,
-                            mime=mime_type
-                        )
-        
         except Exception as e:
             st.error(f"Error preparing downloads: {str(e)}")
-        
-        finally:
-            # Cleanup
-            if os.path.exists(output_dir):
-                shutil.rmtree(output_dir)
-    
-    except Exception as e:
-        st.error(f"❌ Analysis failed: {str(e)}")
-        st.info("Please check your files and try again.")
-    
-    finally:
-        # Cleanup temporary directory
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
-
 else:
-    st.info("👆 Start by uploading one or more NTA data files above")
-    
-    # Show example/instructions
-    with st.expander("📖 How to use this app", expanded=False):
-        st.markdown("""
-        ### Quick Start
-        
-        1. **Upload Files:** Click the file uploader to select your ZetaView .txt files
-           - Single file: Straightforward analysis
-           - Multiple files: Automatic averaging with uncertainty calculation
-        
-        2. **Configure Parameters:** Adjust metadata and dilution factor in the sidebar
-           - **Dilution Factor:** Must match your sample dilution
-           - **Metadata:** For record keeping (experimenter, location, project)
-        
-        3. **Review Results:** 
-           - Check the linear number-weighted distribution plot
-           - Examine the data table
-           - Read the statistics
-        
-        4. **Download:** Get all results as a ZIP or individual files
-           - Metadata (TXT)
-           - Distribution data (TXT) - ready for plotting in Origin/GraphPad
-           - Plot (PNG)
-           - Statistics (TXT)
-        
-        ### File Format Requirements
-        - Format: ZetaView .txt output files
-        - Encoding: Latin-1 (standard for ZetaView)
-        - Each file must contain a "Size Distribution" section
-        """)
+    st.info("👆 Upload NTA files and click 'Analyze Files' to begin")
 
-# ============================================================================
-# FOOTER
-# ============================================================================
-
-st.divider()
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.caption("🔬 NTA Analysis Tool")
-
-with col2:
-    st.caption("Powered by Streamlit")
-
-with col3:
-    st.caption("Version 1.0 MVP")
-
-st.caption("Built for analyzing particle size distributions from ZetaView NTA instruments")
+st.markdown("---")
+st.markdown("**NTA Analysis App** | Cells 01-04 Integrated | © 2025")
