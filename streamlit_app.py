@@ -48,11 +48,32 @@ with st.sidebar:
         value=CONFIG["project_metadata"]["project"],
         help="Your project name"
     )
+    funding = st.text_input(
+        "Funding Source",
+        value=CONFIG["project_metadata"].get("funding", "none"),
+        help="Funding source (optional, default: none)",
+        placeholder="none"
+    )
+    
+    st.subheader("Data Identification")
+    manual_persistent_id = st.text_input(
+        "Manual Persistent ID (optional)",
+        value="",
+        help="Override auto-generated persistentID. Leave empty to auto-generate from filename",
+        placeholder="Leave empty for auto-generation"
+    )
+    if manual_persistent_id:
+        st.info(f"ℹ️ Will use: {manual_persistent_id}")
     
     # Update CONFIG with user values
     CONFIG["project_metadata"]["experimenter"] = experimenter
     CONFIG["project_metadata"]["location"] = location
     CONFIG["project_metadata"]["project"] = project
+    CONFIG["project_metadata"]["funding"] = funding if funding else "none"
+    
+    # Store manual persistent ID if provided
+    if manual_persistent_id:
+        CONFIG["manual_persistent_id"] = manual_persistent_id
 
 # Main content
 st.header("📤 Upload NTA Files")
@@ -111,7 +132,7 @@ if st.session_state.results:
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📈 Distribution Data",
         "🔍 Metadata",
-        "⚠️ Discrepancies",
+        "⚠️ Warnings",
         "📋 Details",
         "💾 Download"
     ])
@@ -120,16 +141,24 @@ if st.session_state.results:
     with tab1:
         st.subheader("Particle Size Distribution")
         
+        # Calculate quality status
+        quality_status = "✓ GOOD"
+        if results['quality_alerts']:
+            quality_status = "❌ POOR"
+        elif results['high_variation_fields']:
+            quality_status = "⚠️ FAIR"
+        
+        # Get detected traces from metadata
+        detected_traces = results['metadata'].get('nta_number_of_traces_sum', 'N/A')
+        
         # Key statistics
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Files Processed", results['num_replicates'])
         with col2:
-            st.metric("Size Bins", len(results['distribution']))
+            st.metric("Detected Traces", detected_traces)
         with col3:
-            st.metric("Size Range", f"{results['distribution']['size_nm'].min():.1f} - {results['distribution']['size_nm'].max():.0f} nm")
-        with col4:
-            st.metric("Scales", f"{results['distribution']['scale'].nunique()}")
+            st.metric("Quality Status", quality_status)
         
         # Distribution preview
         st.subheader("Distribution Data Preview")
@@ -169,77 +198,37 @@ if st.session_state.results:
         )
         st.dataframe(metadata_df, use_container_width=True)
     
-    # TAB 3: Metadata Discrepancies & Warnings
+    # TAB 3: Warnings & Discrepancies
     with tab3:
-        st.subheader("⚠️ Metadata Discrepancies & Quality Alerts")
+        # Check if there are any concerning issues
+        has_alerts = bool(results['quality_alerts'])
+        has_variation = bool(results['high_variation_fields'])
         
-        # Quality control alerts
-        if results['quality_alerts']:
-            st.warning("🚨 **Quality Control Alerts Detected**")
-            for alert in results['quality_alerts']:
-                st.write(f"- {alert}")
+        if not has_alerts and not has_variation:
+            # All good!
+            st.success("✅ No quality issues detected!")
+            st.write("""
+            Your measurement looks good:
+            - No quality control alerts
+            - No high variation in measurement parameters
+            - All data consistent across replicates
+            """)
         else:
-            st.info("✅ No quality control alerts")
-        
-        # High variation fields
-        if results['high_variation_fields']:
-            st.warning("📊 **High Variation Detected**")
-            for field in results['high_variation_fields']:
-                st.write(f"- {field}")
-        else:
-            st.info("✅ No high variation detected")
-        
-        # Different fields summary
-        if results['different_fields']:
-            st.subheader("Fields with Differences Across Files")
-            st.write(f"**{len(results['different_fields'])} field(s) differ across files**")
+            st.subheader("⚠️ Concerning Items")
             
-            # Show which fields differ
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write("**Different Fields:**")
-                for field in sorted(results['different_fields'].keys())[:10]:
-                    values = results['different_fields'][field]
-                    st.write(f"- {field}: {len(set(values))} unique value(s)")
+            # Quality control alerts
+            if results['quality_alerts']:
+                st.error("🚨 **Quality Control Alerts**")
+                for alert in results['quality_alerts']:
+                    st.write(f"- {alert}")
+                st.write("**Recommendation:** Review measurement conditions and consider if data is suitable for publication.")
             
-            with col2:
-                st.write("**Identical Fields:**")
-                st.write(f"Total: {len(results['identical_fields'])} field(s)")
-                for field in sorted(results['identical_fields'].keys())[:10]:
+            # High variation fields
+            if results['high_variation_fields']:
+                st.warning("📊 **High Variation Between Replicates**")
+                for field in results['high_variation_fields']:
                     st.write(f"- {field}")
-        else:
-            st.info("✅ All extracted fields are identical across files")
-        
-        # Detailed comparison
-        st.subheader("Detailed Field Comparison")
-        
-        if results['different_fields']:
-            selected_field = st.selectbox(
-                "Select a field to see values from each file:",
-                sorted(results['different_fields'].keys())
-            )
-            
-            if selected_field:
-                values = results['different_fields'][selected_field]
-                filenames = list(results['all_file_metadata'].keys())
-                
-                comparison_data = []
-                for filename, value in zip(filenames, values):
-                    comparison_data.append({
-                        'File': filename,
-                        'Value': value
-                    })
-                
-                comparison_df = pd.DataFrame(comparison_data)
-                st.dataframe(comparison_df, use_container_width=True)
-                
-                # Show explanation
-                unique_values = set(values)
-                if len(unique_values) > 1:
-                    st.info(
-                        f"⚠️ This field has **{len(unique_values)} different value(s)** across files:\n"
-                        f"- {', '.join(str(v) for v in unique_values)}"
-                    )
+                st.write("**Recommendation:** Check sample consistency, mixing, and instrument stability.")
     
     # TAB 4: Details
     with tab4:
@@ -283,6 +272,23 @@ if st.session_state.results:
     with tab5:
         st.subheader("💾 Download Results")
         
+        # Scale selection guide
+        st.info("""
+        **📊 How to choose your scale:**
+        
+        - **LINEAR Scale**: Use when plotting with equal-width bins on X-axis
+          - Best for: Statistical analysis, focus on small particles
+          - When: Creating your own plots in spreadsheet/Python
+        
+        - **LOGARITHMIC Scale**: Use when plotting with log-spaced bins on X-axis  
+          - Best for: Publication plots, wide size ranges, log-normal distributions
+          - When: Standard choice for most applications
+        
+        👉 **Not sure?** Start with **LOGARITHMIC** - it's the publication standard.
+        """)
+        
+        st.markdown("---")
+        
         # Create output directory
         output_dir = tempfile.mkdtemp()
         
@@ -290,41 +296,95 @@ if st.session_state.results:
         try:
             created_files = st.session_state.analyzer.save_outputs(output_dir)
             
-            # Create download buttons
-            st.write("**Available files for download:**")
+            # Organize files by type
+            metadata_files = [f for f in created_files if 'metadata' in f.lower()]
+            distribution_files = [f for f in created_files if 'psd' in f.lower()]
             
-            for filepath in created_files:
-                filename = os.path.basename(filepath)
-                with open(filepath, 'rb') as f:
-                    file_content = f.read()
+            if distribution_files:
+                st.subheader("📈 Distribution Data Files (by Scale)")
+                st.write("Choose the scale appropriate for your analysis:")
                 
+                for filepath in sorted(distribution_files):
+                    filename = os.path.basename(filepath)
+                    with open(filepath, 'r') as f:
+                        file_content = f.read()
+                    
+                    # Show which scale this is
+                    if 'LINEAR' in filename:
+                        scale_label = "📊 LINEAR Scale"
+                        scale_desc = "Equal bin widths on X-axis"
+                    else:
+                        scale_label = "📈 LOGARITHMIC Scale ⭐ Recommended"
+                        scale_desc = "Equal spacing in log space - standard for publication"
+                    
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.write(f"**{scale_label}**")
+                        st.caption(scale_desc)
+                    with col2:
+                        st.download_button(
+                            label="📥 Download",
+                            data=file_content,
+                            file_name=filename,
+                            mime="text/plain",
+                            key=f"download_{filename}"
+                        )
+                    
+                    # Show file preview
+                    with st.expander(f"👁️ Preview: {filename}"):
+                        # Show first few lines with header info
+                        preview_lines = file_content.split('\n')[:12]
+                        st.code('\n'.join(preview_lines), language='text')
+            
+            if metadata_files:
+                st.subheader("📋 Metadata File")
+                
+                for filepath in metadata_files:
+                    filename = os.path.basename(filepath)
+                    with open(filepath, 'r') as f:
+                        file_content = f.read()
+                    
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.write(f"**{filename}**")
+                        st.caption("Standardized metadata with extraction notes")
+                    with col2:
+                        st.download_button(
+                            label="📥 Download",
+                            data=file_content,
+                            file_name=filename,
+                            mime="text/plain",
+                            key=f"download_meta_{filename}"
+                        )
+            
+            st.markdown("---")
+            st.subheader("📦 Alternative Formats (for reference)")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Combined distribution as CSV (for reference)
+                dist_csv = results['distribution'].to_csv(index=False)
                 st.download_button(
-                    label=f"📥 Download {filename}",
-                    data=file_content,
-                    file_name=filename,
-                    mime="text/plain"
+                    label="📥 All Data Combined (CSV)",
+                    data=dist_csv,
+                    file_name=f"{results['metadata'].get('persistentID', 'analysis')}_distribution_combined.csv",
+                    mime="text/csv",
+                    help="Contains both LINEAR and LOGARITHMIC data in one file"
                 )
             
-            # Distribution as CSV
-            dist_csv = results['distribution'].to_csv(index=False)
-            st.download_button(
-                label="📥 Download Distribution Data (CSV)",
-                data=dist_csv,
-                file_name=f"{results['metadata'].get('persistentID', 'analysis')}_distribution.csv",
-                mime="text/csv"
-            )
-            
-            # Metadata as JSON
-            metadata_json = pd.DataFrame(
-                list(results['metadata'].items()),
-                columns=['Field', 'Value']
-            ).to_json(orient='records')
-            st.download_button(
-                label="📥 Download Metadata (JSON)",
-                data=metadata_json,
-                file_name=f"{results['metadata'].get('persistentID', 'analysis')}_metadata.json",
-                mime="application/json"
-            )
+            with col2:
+                # Metadata as JSON
+                metadata_json = pd.DataFrame(
+                    list(results['metadata'].items()),
+                    columns=['Field', 'Value']
+                ).to_json(orient='records', indent=2)
+                st.download_button(
+                    label="📥 Metadata (JSON)",
+                    data=metadata_json,
+                    file_name=f"{results['metadata'].get('persistentID', 'analysis')}_metadata.json",
+                    mime="application/json"
+                )
             
             st.success("✅ All files ready for download")
             

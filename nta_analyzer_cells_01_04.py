@@ -36,7 +36,7 @@ if 'CONFIG' not in globals():
             "project": "Your_Project_Name",
             "meta_version": "v03",
             "pi": "Principal_Investigator_Initials",
-            "funding": "Funding_Source",
+            "funding": "none",
             "data_collection_method": "NTA",
             "unit_of_analysis": '["nm", "nm^2", "nm^3"]',
             "keywords": "particle_size_distribution",
@@ -48,20 +48,28 @@ if 'CONFIG' not in globals():
 def extract_sample_info(filename):
     """
     Extract sample information from filename for more readable display.
+    Also extracts the persistentID (everything up to and including the date YYYYMMDD).
     (From Cell 01)
     """
-    base_name = filename.replace("_rawdata.txt", "").replace("size_NTA", "")
+    base_name = filename.replace("_rawdata.txt", "").replace("_rawdata", "")
     
     if base_name.startswith("Data_"):
         base_name = base_name[5:]
     
-    date_match = re.search(r'_(\d{8})_', base_name)
+    # Extract persistentID: everything up to and including YYYYMMDD date
+    import re
+    date_match = re.search(r'(.+?)_(\d{8})(?:_|$)', base_name)
+    persistent_id = ""
     date_str = ""
-    if date_match:
-        date = date_match.group(1)
-        date_str = f" (Date: {date[0:4]}-{date[4:6]}-{date[6:8]})"
     
-    return f"{base_name}{date_str}"
+    if date_match:
+        persistent_id = date_match.group(1) + "_" + date_match.group(2)  # e.g., CBP_LEAF_5455892_2_20250710
+        date = date_match.group(2)
+        date_str = f" (Date: {date[0:4]}-{date[4:6]}-{date[6:8]})"
+    else:
+        persistent_id = base_name
+    
+    return persistent_id, f"{persistent_id}{date_str}"
 
 
 # ============================================================================
@@ -458,9 +466,7 @@ def extract_all_metadata_fields(content, filename):
         ('dilution', r'Dilution::\s+(\d+\.\d+)'),
         ('concentration_correction_factor', r'Concentration Correction Factor:\s+(.+)'),
         ('laser_wavelength', r'Laser Wavelength nm:\s+(\d+\.\d+)'),
-        ('median_number_d50', r'Median Number \(D50\):\s+(.+)'),
-        ('median_concentration_d50', r'Median Concentration \(D50\):\s+(.+)'),
-        ('median_volume_d50', r'Median Volume \(D50\):\s+(.+)'),
+        # NOTE: Removed median_*_d50 fields - calculated separately in Cell 05/07
         ('minimum_brightness', r'Minimum Brightness:\s+(\d+)'),
         ('minimum_area', r'Minimum Area:\s+(\d+)'),
         ('maximum_area', r'Maximum Area:\s+(\d+)'),
@@ -488,12 +494,9 @@ def extract_all_metadata_fields(content, filename):
     
     metadata['filename'] = filename
     
-    base_name = os.path.splitext(filename)[0]
-    if base_name.endswith("_rawdata"):
-        base_name = base_name[:-8]
-    if base_name.startswith("Data_"):
-        base_name = base_name[5:]
-    metadata['uniqueID'] = base_name
+    # Extract persistentID (up to and including YYYYMMDD date)
+    persistent_id, _ = extract_sample_info(filename)
+    metadata['uniqueID'] = persistent_id
     
     original_file = metadata.get('original_file', '')
     if original_file:
@@ -567,6 +570,10 @@ def analyze_field_differences(all_files_metadata):
 def smart_format_field(field_name, values):
     """
     Apply smart formatting rules based on field type and content.
+    Special rules:
+    - Temperature: Alert if difference > 1°C
+    - Dilution: Alert if any difference
+    - Others: Alert if CV > 10%
     (From Cell 04)
     """
     file_specific_fields = [
@@ -579,11 +586,7 @@ def smart_format_field(field_name, values):
     ]
     
     sum_fields = [
-        'number_of_traces', 'detected_particles'
-    ]
-    
-    instrument_determined_fields = [
-        'median_number_d50', 'median_concentration_d50', 'median_volume_d50'
+        'number_of_traces'
     ]
     
     quality_control_fields = [
@@ -606,44 +609,67 @@ def smart_format_field(field_name, values):
         except ValueError:
             return json.dumps(values), "non_numeric_sum_field"
     
-    elif field_name in instrument_determined_fields:
-        return json.dumps(values), "instrument_determined_per_measurement"
-    
     elif field_name in quality_control_fields:
         unique_values = list(set(values))
-        if len(unique_values) == 1:
+        
+        # Special check for particle_drift_check_result
+        if field_name == 'particle_drift_check_result':
+            acceptable_values = ['Good', 'Very Good']
+            bad_values = [v for v in values if v not in acceptable_values]
+            
+            if bad_values:
+                # Has "too high" or "Poor" or other non-good values
+                return json.dumps(values), f"QC_ALERT_particle_drift_not_good"
+            elif len(unique_values) == 1:
+                return values[0], "qc_consistent"
+            else:
+                return json.dumps(values), f"QC_ALERT_inconsistent_values"
+        
+        # General QC logic for other fields
+        elif len(unique_values) == 1:
             return values[0], "qc_consistent"
         else:
             return json.dumps(values), f"QC_ALERT_inconsistent_values"
     
-    else:
+    elif field_name == 'temperature':
+        # Special handling: Alert if temperature differs by more than 1°C
         try:
-            if field_name == 'avi_filesize':
-                numeric_values = []
-                for v in values:
-                    if isinstance(v, str) and 'MB' in v:
-                        numeric_values.append(float(v.replace(' MB', '')))
-                    else:
-                        numeric_values.append(float(v))
-                
-                mean_val = np.mean(numeric_values)
-                std_val = np.std(numeric_values, ddof=1) if len(numeric_values) > 1 else 0.0
-                
-                cv = (std_val / mean_val * 100) if mean_val != 0 else 0
-                if cv > 10:
-                    notes = f"HIGH_VARIATION_CV_{cv:.1f}%"
-                else:
-                    notes = f"mean_sd_of_{len(values)}"
-                
-                return f"{mean_val:.2f} ± {std_val:.2f} MB", notes
+            numeric_values = [float(v) for v in values]
+            mean_val = np.mean(numeric_values)
+            std_val = np.std(numeric_values, ddof=1) if len(numeric_values) > 1 else 0.0
+            max_range = max(numeric_values) - min(numeric_values)
             
+            if max_range > 1.0:
+                notes = f"TEMPERATURE_ALERT_range_{max_range:.2f}°C"
+            else:
+                notes = f"mean_sd_of_{len(values)}"
+            
+            return f"{mean_val:.2f} ± {std_val:.2f}", notes
+        except ValueError:
+            return json.dumps(values), "non_numeric"
+    
+    elif field_name == 'dilution':
+        # Special handling: Alert if any different
+        unique_values = list(set(values))
+        if len(unique_values) > 1:
+            return json.dumps(values), "DILUTION_ALERT_different_values"
+        else:
+            try:
+                return f"{float(values[0]):.2f}", "identical"
+            except ValueError:
+                return values[0], "identical"
+    
+    else:
+        # Try to calculate mean ± SD for numeric fields
+        try:
             numeric_values = [float(v) for v in values]
             mean_val = np.mean(numeric_values)
             std_val = np.std(numeric_values, ddof=1) if len(numeric_values) > 1 else 0.0
             
+            # Check for concerning variations
             cv = (std_val / mean_val * 100) if mean_val != 0 else 0
             
-            if cv > 10:
+            if cv > 10:  # More than 10% coefficient of variation
                 notes = f"HIGH_VARIATION_CV_{cv:.1f}%"
             else:
                 notes = f"mean_sd_of_{len(values)}"
@@ -651,6 +677,7 @@ def smart_format_field(field_name, values):
             return f"{mean_val:.2f} ± {std_val:.2f}", notes
             
         except ValueError:
+            # Non-numeric field - keep as array
             return json.dumps(values), "non_numeric_different"
 
 
@@ -679,12 +706,16 @@ def create_automated_metadata(all_files_metadata, identical_fields, different_fi
     if config and "project_metadata" in config:
         project_meta = config["project_metadata"]
     
+    # Check for manual persistent ID override
+    if config and "manual_persistent_id" in config and config["manual_persistent_id"]:
+        unique_id = config["manual_persistent_id"]
+    
     metadata['experimenter'] = project_meta.get('experimenter', 'Your_Initials')
     metadata['location'] = project_meta.get('location', 'Your_Lab_Location')
     metadata['project'] = project_meta.get('project', 'Your_Project_Name')
     metadata['meta_version'] = project_meta.get('meta_version', 'v03')
     metadata['pi'] = project_meta.get('pi', 'Your_PI_Initials')
-    metadata['funding'] = project_meta.get('funding', 'Funding_Source')
+    metadata['funding'] = project_meta.get('funding', 'none')
     metadata['persistentID'] = unique_id
     metadata['data_collection_method'] = project_meta.get('data_collection_method', 'NTA')
     metadata['nta_instrument'] = 'ZetaView'
@@ -706,22 +737,31 @@ def create_automated_metadata(all_files_metadata, identical_fields, different_fi
     metadata['num_replicates'] = num_files
     metadata['source_files'] = json.dumps(filenames)
     
+    # Fields to exclude (instrument D50s - we calculate better ones)
+    excluded_fields = {
+        'median_number_d50', 'median_concentration_d50', 'median_volume_d50',
+        'detected_particles'  # Use average_number_of_particles instead
+    }
+    
     essential_fields = {
         'date', 'temperature', 'ph', 'dilution', 'laser_wavelength', 'electrolyte',
         'positions', 'cycles', 'fps', 
         'particle_drift_check_result', 'cell_check_result',
-        'average_number_of_particles', 'number_of_traces', 'detected_particles',
+        'average_number_of_particles', 'number_of_traces',
         'conductivity', 'scattering_intensity', 'viscosity',
         'avi_filesize'
     }
+    
+    # Remove excluded fields from different_fields
+    different_fields = {k: v for k, v in different_fields.items() if k not in excluded_fields}
     
     for field_name, value in identical_fields.items():
         if field_name in essential_fields:
             if field_name in ['temperature', 'ph', 'dilution', 'laser_wavelength', 'positions', 
                              'cycles', 'fps', 'average_number_of_particles', 'number_of_traces', 
-                             'detected_particles', 'particle_drift_check_result', 'cell_check_result',
+                             'particle_drift_check_result', 'cell_check_result',
                              'conductivity', 'scattering_intensity', 'viscosity', 'avi_filesize']:
-                if field_name in ['number_of_traces', 'detected_particles']:
+                if field_name in ['number_of_traces']:
                     metadata[f'nta_{field_name}_sum'] = value
                 else:
                     metadata[f'nta_{field_name}'] = value
@@ -730,6 +770,12 @@ def create_automated_metadata(all_files_metadata, identical_fields, different_fi
     
     quality_alerts = []
     high_variation_fields = []
+    
+    # Check for particle drift issues even if identical across files
+    if 'particle_drift_check_result' in identical_fields:
+        drift_value = identical_fields['particle_drift_check_result']
+        if drift_value not in ['Good', 'Very Good']:
+            quality_alerts.append(f"particle_drift_check_result: {drift_value} (not 'Good' or 'Very Good')")
     
     for field_name, values in different_fields.items():
         if field_name in essential_fields:
@@ -742,9 +788,9 @@ def create_automated_metadata(all_files_metadata, identical_fields, different_fi
             
             if field_name in ['temperature', 'ph', 'dilution', 'laser_wavelength', 'positions', 
                              'cycles', 'fps', 'average_number_of_particles', 'number_of_traces', 
-                             'detected_particles', 'particle_drift_check_result', 'cell_check_result',
+                             'particle_drift_check_result', 'cell_check_result',
                              'conductivity', 'scattering_intensity', 'viscosity', 'avi_filesize']:
-                if field_name in ['number_of_traces', 'detected_particles']:
+                if field_name in ['number_of_traces']:
                     metadata[f'nta_{field_name}_sum'] = formatted_value
                 else:
                     metadata[f'nta_{field_name}'] = formatted_value
@@ -764,10 +810,17 @@ def create_automated_metadata(all_files_metadata, identical_fields, different_fi
     return metadata, quality_alerts, high_variation_fields
 
 
-def save_metadata_file(metadata, output_dir=None, config=None):
+def save_metadata_file(metadata, output_dir=None, config=None, include_headers=True):
     """
     Save metadata to a file in the specified output directory.
+    Can be organized into logical sections with clear headers, or as plain tab-delimited.
     (From Cell 04)
+    
+    Parameters:
+    metadata (dict): Metadata dictionary to save
+    output_dir (str): Output directory path (optional)
+    config (dict): Configuration dictionary (optional)
+    include_headers (bool): If True, organize with section headers. If False, plain format for Excel import.
     """
     if output_dir is None:
         if config is not None and "directory" in config:
@@ -782,12 +835,76 @@ def save_metadata_file(metadata, output_dir=None, config=None):
         return False, f"Failed to create metadata directory: {str(e)}"
     
     unique_id = metadata.get('persistentID', 'unknown')
-    metadata_path = os.path.join(output_dir, f"Data_{unique_id}_metadata.txt")
+    
+    # Use different filenames based on include_headers
+    if include_headers:
+        metadata_path = os.path.join(output_dir, f"Data_{unique_id}_metadata.txt")
+    else:
+        metadata_path = os.path.join(output_dir, f"Data_{unique_id}_metadata_excel.txt")
     
     try:
-        with open(metadata_path, 'w') as f:
-            for key, value in metadata.items():
-                f.write(f"{key}\t{value}\t\n")
+        if include_headers:
+            # Define field order and sections (with headers)
+            sections = {
+                'SAMPLE & PROJECT INFORMATION': [
+                    'persistentID', 'sample', 'electrolyte', 'date', 'num_replicates'
+                ],
+                'EXPERIMENTER & LOCATION': [
+                    'experimenter', 'location', 'project', 'pi', 'funding'
+                ],
+                'INSTRUMENT & METHOD': [
+                    'data_collection_method', 'nta_instrument', 'nta_software'
+                ],
+                'MEASUREMENT CONDITIONS': [
+                    'nta_temperature', 'nta_ph', 'nta_conductivity', 
+                    'nta_dilution', 'nta_viscosity'
+                ],
+                'MEASUREMENT PARAMETERS': [
+                    'nta_laser_wavelength', 'nta_positions', 'nta_cycles', 'nta_fps'
+                ],
+                'DATA QUALITY & STATISTICS': [
+                    'nta_average_number_of_particles', 'nta_number_of_traces_sum', 
+                    'nta_scattering_intensity'
+                ],
+                'QUALITY CONTROL': [
+                    'nta_particle_drift_check_result', 'nta_cell_check_result'
+                ],
+                'FILE REFERENCES': [
+                    'nta_processed_file', 'source_files', 'meta_version', 'python_analysis'
+                ],
+                'QUALITY ALERTS': [
+                    'quality_control_alerts', 'high_variation_fields'
+                ]
+            }
+            
+            # Write metadata with section headers
+            with open(metadata_path, 'w') as f:
+                for section, field_names in sections.items():
+                    # Write section header
+                    f.write(f"\n# ============ {section} ============\n")
+                    
+                    # Write fields in this section
+                    for field_name in field_names:
+                        if field_name in metadata:
+                            value = metadata[field_name]
+                            f.write(f"{field_name}\t{value}\t\n")
+                
+                # Write any remaining fields not in sections
+                used_fields = set()
+                for field_names in sections.values():
+                    used_fields.update(field_names)
+                
+                remaining = set(metadata.keys()) - used_fields
+                if remaining:
+                    f.write(f"\n# ============ OTHER ============\n")
+                    for field_name in sorted(remaining):
+                        value = metadata[field_name]
+                        f.write(f"{field_name}\t{value}\t\n")
+        else:
+            # Plain tab-delimited format (no headers - for Excel import)
+            with open(metadata_path, 'w') as f:
+                for key, value in sorted(metadata.items()):
+                    f.write(f"{key}\t{value}\n")
         
         return True, metadata_path
     except Exception as e:
@@ -873,7 +990,7 @@ class NTAAnalyzer:
         return self.results
     
     def save_outputs(self, output_dir):
-        """Save all outputs."""
+        """Save all outputs with proper organization."""
         if 'distribution' not in self.results:
             raise Exception("No results. Run process() first.")
         
@@ -882,16 +999,66 @@ class NTAAnalyzer:
         unique_id = self.results['metadata'].get('persistentID', 'analysis')
         created_files = []
         
-        # Save metadata
-        meta_path = os.path.join(output_dir, f'Data_{unique_id}_metadata.txt')
-        with open(meta_path, 'w') as f:
-            for key, value in sorted(self.results['metadata'].items()):
-                f.write(f"{key}\t{value}\t\n")
-        created_files.append(meta_path)
+        # ===== Save Metadata (with headers - human readable) =====
+        success, meta_result = save_metadata_file(self.results['metadata'], output_dir, self.config, include_headers=True)
+        if success:
+            created_files.append(meta_result)
+        else:
+            raise Exception(f"Failed to save metadata: {meta_result}")
         
-        # Save distribution
-        dist_path = os.path.join(output_dir, f'Data_{unique_id}_PSD.txt')
-        self.results['distribution'].to_csv(dist_path, sep='\t', index=False)
-        created_files.append(dist_path)
+        # ===== Save Metadata (without headers - Excel import friendly) =====
+        success, meta_result_excel = save_metadata_file(self.results['metadata'], output_dir, self.config, include_headers=False)
+        if success:
+            created_files.append(meta_result_excel)
+        
+        
+        # ===== Save Distribution Data (Split by Scale) =====
+        dist = self.results['distribution']
+        
+        # Linear scale
+        linear_data = dist[dist['scale'] == 'linear'].copy()
+        if not linear_data.empty:
+            linear_path = os.path.join(output_dir, f'Data_{unique_id}_PSD_LINEAR.txt')
+            
+            # Add informative header
+            with open(linear_path, 'w') as f:
+                f.write("# PARTICLE SIZE DISTRIBUTION - LINEAR SCALE\n")
+                f.write("# Use this file when plotting data on LINEAR X-axis\n")
+                f.write("# Good for: Equal bin widths, small particles, statistical tests\n")
+                f.write("#\n")
+                f.write(f"# Sample: {self.results['metadata'].get('sample', 'Unknown')}\n")
+                f.write(f"# Replicates: {self.results['num_replicates']}\n")
+                f.write(f"# Data points: {len(linear_data)}\n")
+                f.write("#\n")
+            
+            # Append data
+            linear_data_export = linear_data.drop('scale', axis=1)
+            with open(linear_path, 'a') as f:
+                linear_data_export.to_csv(f, sep='\t', index=False)
+            
+            created_files.append(linear_path)
+        
+        # Logarithmic scale
+        log_data = dist[dist['scale'] == 'logarithmic'].copy()
+        if not log_data.empty:
+            log_path = os.path.join(output_dir, f'Data_{unique_id}_PSD_LOGARITHMIC.txt')
+            
+            # Add informative header
+            with open(log_path, 'w') as f:
+                f.write("# PARTICLE SIZE DISTRIBUTION - LOGARITHMIC SCALE\n")
+                f.write("# Use this file when plotting data on LOGARITHMIC X-axis\n")
+                f.write("# Good for: Wide size ranges, log-normal distributions, publication plots\n")
+                f.write("#\n")
+                f.write(f"# Sample: {self.results['metadata'].get('sample', 'Unknown')}\n")
+                f.write(f"# Replicates: {self.results['num_replicates']}\n")
+                f.write(f"# Data points: {len(log_data)}\n")
+                f.write("#\n")
+            
+            # Append data
+            log_data_export = log_data.drop('scale', axis=1)
+            with open(log_path, 'a') as f:
+                log_data_export.to_csv(f, sep='\t', index=False)
+            
+            created_files.append(log_path)
         
         return created_files
