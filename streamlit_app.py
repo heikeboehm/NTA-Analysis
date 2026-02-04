@@ -1,297 +1,194 @@
 """
 NTA Data Analysis - Streamlit Web Application
-Updated to use combined analyzer with Cells 01-05
-Includes dilution correction, normalization, cumulative distributions, and total metrics
+Uses analyzer with Cells 01-05
 """
 
 import streamlit as st
 import pandas as pd
-import io
 import tempfile
 import os
-from nta_analyzer_cells_01_05 import NTAAnalyzer, CONFIG
+from nta_analyzer_cells_01_05 import run_analysis_pipeline, CONFIG
 
 # Set page config
 st.set_page_config(
     page_title="NTA Analysis",
-    page_icon="ðŸ§ª",
+    page_icon="microscope",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-st.title("ðŸ§ª NTA Particle Size Analysis")
+st.title("NTA Particle Size Analysis")
 st.markdown("---")
 
 # Initialize session state
-if 'analyzer' not in st.session_state:
-    st.session_state.analyzer = None
 if 'results' not in st.session_state:
     st.session_state.results = None
 
 # Sidebar configuration
 with st.sidebar:
-    st.header("âš™ï¸ Configuration")
+    st.header("Configuration")
     
     st.subheader("Project Information")
     experimenter = st.text_input(
         "Experimenter",
-        value=CONFIG["project_metadata"]["experimenter"],
-        help="Your initials or name"
+        value=CONFIG["project_metadata"]["experimenter"]
     )
     location = st.text_input(
         "Lab Location",
-        value=CONFIG["project_metadata"]["location"],
-        help="Where the analysis is performed"
+        value=CONFIG["project_metadata"]["location"]
     )
     project = st.text_input(
         "Project Name",
-        value=CONFIG["project_metadata"]["project"],
-        help="Your project name"
+        value=CONFIG["project_metadata"]["project"]
     )
     pi = st.text_input(
         "Principal Investigator",
-        value=CONFIG["project_metadata"].get("pi", "Your_PI_Initials"),
-        help="PI initials or name"
+        value=CONFIG["project_metadata"]["pi"]
     )
     funding = st.text_input(
         "Funding Source",
-        value=CONFIG["project_metadata"].get("funding", "none"),
-        help="Funding source (optional, default: none)",
-        placeholder="none"
+        value=CONFIG["project_metadata"]["funding"]
     )
     
-    st.subheader("Data Identification")
-    manual_persistent_id = st.text_input(
-        "Manual Persistent ID (optional)",
-        value="",
-        help="Override auto-generated persistentID. Leave empty to auto-generate from filename",
-        placeholder="Leave empty for auto-generation"
-    )
-    if manual_persistent_id:
-        st.info(f"â„¹ï¸ Will use: {manual_persistent_id}")
+    st.info("Configuration changes apply when you click 'Analyze Files'")
     
-    # Update CONFIG with user values
-    CONFIG["project_metadata"]["experimenter"] = experimenter
-    CONFIG["project_metadata"]["location"] = location
-    CONFIG["project_metadata"]["project"] = project
-    CONFIG["project_metadata"]["pi"] = pi
-    CONFIG["project_metadata"]["funding"] = funding if funding else "none"
-    
-    # Store manual persistent ID if provided
-    if manual_persistent_id:
-        CONFIG["manual_persistent_id"] = manual_persistent_id
-    
-    st.info("â„¹ï¸ Configuration changes apply when you click 'Analyze Files'")
-    
-    # Reset button
-    if st.button("ðŸ”„ Reset All"):
-        st.session_state.clear()
+    if st.button("Reset All"):
+        st.session_state.results = None
         st.rerun()
 
-# Main content
-st.header("ðŸ“¤ Upload NTA Files")
-st.markdown("Upload one or more NTA data files (.txt format)")
+# File upload section
+st.subheader("Upload NTA Files")
 
 uploaded_files = st.file_uploader(
-    "Choose NTA files",
+    "Select NTA data files",
     type="txt",
     accept_multiple_files=True,
-    help="Select one or more NTA data files for analysis"
+    help="Upload one or more NTA raw data files for analysis"
 )
 
-if uploaded_files:
-    if st.button("ðŸ” Analyze Files", key="analyze_btn", type="primary"):
-        with st.spinner("Processing files..."):
+if st.button("Analyze Files", type="primary"):
+    if not uploaded_files:
+        st.error("Please upload at least one file")
+    else:
+        with st.spinner("Analyzing files..."):
             try:
-                # Create temp directory
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    # Save uploaded files to temp directory
-                    temp_files = []
-                    for uploaded_file in uploaded_files:
-                        temp_path = os.path.join(temp_dir, uploaded_file.name)
-                        with open(temp_path, 'wb') as f:
-                            f.write(uploaded_file.getbuffer())
-                        temp_files.append(temp_path)
-                    
-                    # Run analysis
-                    analyzer = NTAAnalyzer(config=CONFIG)
-                    results = analyzer.process(temp_files)
-                    
-                    # Store in session state
-                    st.session_state.analyzer = analyzer
-                    st.session_state.results = results
+                # Create temporary files
+                temp_dir = tempfile.mkdtemp()
+                temp_files = []
                 
-                st.success("âœ… Analysis completed!")
+                for uploaded_file in uploaded_files:
+                    temp_path = os.path.join(temp_dir, uploaded_file.name)
+                    with open(temp_path, 'wb') as f:
+                        f.write(uploaded_file.getbuffer())
+                    temp_files.append(temp_path)
+                
+                # Update config with sidebar values
+                config = CONFIG.copy()
+                config["project_metadata"]["experimenter"] = experimenter
+                config["project_metadata"]["location"] = location
+                config["project_metadata"]["project"] = project
+                config["project_metadata"]["pi"] = pi
+                config["project_metadata"]["funding"] = funding
+                
+                # Run analysis
+                results = run_analysis_pipeline(temp_files, config=config)
+                st.session_state.results = results
+                
+                st.success("Analysis completed successfully!")
                 
             except Exception as e:
-                st.error(f"âŒ Error during analysis: {str(e)}")
+                st.error(f"Error during analysis: {str(e)}")
                 st.stop()
 
 # Display results if analysis was successful
-if st.session_state.results:
+if st.session_state.results is not None:
     results = st.session_state.results
     
     st.markdown("---")
-    st.header("ðŸ“Š Analysis Results")
+    st.subheader("Results")
     
-    # Tabs for different views
+    # Create tabs for results
     tab1, tab2, tab3, tab4 = st.tabs([
-        "ðŸ“ˆ Distribution Data",
-        "ðŸ” Metadata",
-        "âš ï¸ Warnings",
-        "ðŸ’¾ Download"
+        "Distribution Data",
+        "Metadata",
+        "Warnings",
+        "Download"
     ])
     
     # TAB 1: Distribution Data
     with tab1:
-        st.subheader("Distribution Data")
+        st.subheader("Particle Size Distribution")
         
-        # Show metrics
+        # Summary metrics
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Files", results['num_replicates'])
+            st.metric("Files Analyzed", results['num_replicates'])
         with col2:
-            st.metric("Traces", results['metadata'].get('nta_number_of_traces_sum', 'N/A'))
+            total_rows = len(results['distribution'])
+            st.metric("Data Points", total_rows)
         with col3:
-            if results['quality_alerts']:
-                st.metric("Alert", "High drift")
-            elif results['high_variation_fields']:
-                st.metric("Status", "High variation")
-            else:
-                st.metric("Status", "âœ“ Good")
+            st.metric("Scales", "Linear + Log")
         
-        # Show first 9 rows of linear data
-        st.subheader("Data Preview (Linear)")
-        linear_data = results['distribution'][results['distribution']['scale'] == 'linear']
-        st.dataframe(linear_data.head(9), use_container_width=True)
+        # Preview data
+        st.write("**Linear Scale Data (first 9 rows):**")
+        linear_data = results['distribution'][results['distribution']['scale'] == 'linear'].head(9)
+        st.dataframe(linear_data, use_container_width=True)
     
     # TAB 2: Metadata
     with tab2:
-        st.subheader("Metadata")
+        st.subheader("Sample Metadata")
         
         metadata = results['metadata']
-        
-        # Define sections in order (same as in save_metadata_file)
-        sections = {
-            'SAMPLE & PROJECT INFORMATION': [
-                'persistentID', 'sample', 'electrolyte', 'date', 'num_replicates'
-            ],
-            'EXPERIMENTER & LOCATION': [
-                'experimenter', 'location', 'project', 'pi', 'funding'
-            ],
-            'INSTRUMENT & METHOD': [
-                'data_collection_method', 'nta_instrument', 'nta_software'
-            ],
-            'MEASUREMENT CONDITIONS': [
-                'nta_temperature', 'nta_ph', 'nta_conductivity', 
-                'nta_dilution', 'nta_viscosity'
-            ],
-            'MEASUREMENT PARAMETERS': [
-                'nta_laser_wavelength', 'nta_positions', 'nta_cycles', 'nta_fps'
-            ],
-            'DATA QUALITY & STATISTICS': [
-                'nta_average_number_of_particles', 'nta_number_of_traces_sum', 
-                'nta_scattering_intensity'
-            ],
-            'QUALITY CONTROL': [
-                'nta_particle_drift_check_result', 'nta_cell_check_result'
-            ],
-            'FILE REFERENCES': [
-                'meta_version', 'python_analysis'
-            ]
-        }
-        
-        # Build ordered list matching sections
-        metadata_rows = []
-        for section_name, field_names in sections.items():
-            for field_name in field_names:
-                if field_name in metadata:
-                    metadata_rows.append({'Field': field_name, 'Value': metadata[field_name]})
-        
-        metadata_df = pd.DataFrame(metadata_rows)
-        st.dataframe(metadata_df, use_container_width=True, hide_index=True)
+        metadata_df = pd.DataFrame(list(metadata.items()), columns=['Field', 'Value'])
+        st.dataframe(metadata_df, use_container_width=True)
     
-    # TAB 3: Warnings & Discrepancies
+    # TAB 3: Warnings
     with tab3:
-        # Check if there are any concerning issues
-        has_alerts = bool(results['quality_alerts'])
-        has_variation = bool(results['high_variation_fields'])
+        st.subheader("Quality Checks")
         
-        if not has_alerts and not has_variation:
-            # All good!
-            st.success("âœ… No quality issues detected!")
-            st.write("""
-            Your measurement looks good:
-            - No quality control alerts
-            - No high variation in measurement parameters
-            - All data consistent across replicates
-            """)
+        field_analysis = results['field_analysis']
+        if field_analysis:
+            for field, analysis in field_analysis.items():
+                if analysis.get('alert'):
+                    st.warning(f"**{field}**: {analysis.get('alert_message', 'Alert detected')}")
         else:
-            st.subheader("âš ï¸ Concerning Items")
-            
-            # Quality control alerts
-            if results['quality_alerts']:
-                st.error("ðŸš¨ **Quality Control Alerts**")
-                for alert in results['quality_alerts']:
-                    st.write(f"- {alert}")
-                st.write("**Recommendation:** Review measurement conditions and consider if data is suitable for publication.")
-            
-            # High variation fields
-            if results['high_variation_fields']:
-                st.warning("ðŸ“Š **High Variation Between Replicates**")
-                for field in results['high_variation_fields']:
-                    st.write(f"- {field}")
-                st.write("**Recommendation:** Check sample consistency, mixing, and instrument stability.")
+            st.success("No quality issues detected!")
     
     # TAB 4: Download
     with tab4:
-        st.subheader("Download")
+        st.subheader("Download Results")
         
-        output_dir = tempfile.mkdtemp()
+        metadata = results['metadata']
+        dist_df = results['distribution'].copy()
+        sample_id = metadata.get('persistentID', 'analysis')
         
-        try:
-            created_files = st.session_state.analyzer.save_outputs(output_dir)
-            
-            # Individual download buttons
-            for filepath in sorted(created_files):
-                filename = os.path.basename(filepath)
-                with open(filepath, 'r') as f:
-                    file_content = f.read()
-                
-                st.download_button(
-                    label=f"ðŸ“¥ {filename}",
-                    data=file_content,
-                    file_name=filename,
-                    mime="text/plain"
-                )
-            
-            # Download all as zip
-            st.markdown("---")
-            
-            import zipfile
-            import io
-            
-            zip_buffer = io.BytesIO()
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                for filepath in created_files:
-                    filename = os.path.basename(filepath)
-                    with open(filepath, 'r') as f:
-                        zip_file.writestr(filename, f.read())
-            
-            zip_buffer.seek(0)
-            sample_id = results['metadata'].get('persistentID', 'analysis')
+        col1, col2 = st.columns(2)
+        
+        # Download Metadata
+        with col1:
+            metadata_content = ""
+            for key, value in sorted(metadata.items()):
+                metadata_content += f"{key}\t{value}\n"
             
             st.download_button(
-                label="ðŸ“¦ Download All (ZIP)",
-                data=zip_buffer.getvalue(),
-                file_name=f"{sample_id}_all.zip",
-                mime="application/zip"
+                label="Download Metadata",
+                data=metadata_content,
+                file_name=f"Data_{sample_id}_metadata.txt",
+                mime="text/plain"
             )
+        
+        # Download PSD Data
+        with col2:
+            psd_content = dist_df.to_csv(sep='\t', index=False)
             
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
+            st.download_button(
+                label="Download PSD Data",
+                data=psd_content,
+                file_name=f"Data_{sample_id}_PSD_COMPREHENSIVE.txt",
+                mime="text/plain"
+            )
 else:
-    st.info("Upload NTA files and click 'Analyze Files'")
+    st.info("Upload NTA files and click 'Analyze Files' to begin")
 
 st.markdown("---")
-st.markdown("**NTA Analysis** | Cells 01-04")
+st.markdown("**NTA Analysis** | Cells 01-05 | With dilution correction, normalization, cumulative distributions")
