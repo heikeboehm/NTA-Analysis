@@ -1309,6 +1309,8 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
             # Skip if required columns don't exist
             if avg_column not in scale_df.columns or sd_column not in scale_df.columns:
                 print(f"    Skipping - missing columns: {avg_column} or {sd_column}")
+                if name == 'number':
+                    print(f"      Available columns: {list(scale_df.columns)}")
                 continue
             
             # Extract data arrays
@@ -1319,6 +1321,8 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
             # Skip if all values are zero or NaN
             if np.all(cumsum_avg == 0) or np.all(np.isnan(cumsum_avg)):
                 print(f"    Skipping - all cumsum values are zero or NaN")
+                if name == 'number':
+                    print(f"      Min: {np.nanmin(cumsum_avg)}, Max: {np.nanmax(cumsum_avg)}, NaN count: {np.sum(np.isnan(cumsum_avg))}")
                 continue
             
             # For absolute distributions (volume, surface area), normalize to 0-1 for D-value calculation
@@ -1336,6 +1340,12 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
                 d10_avg, d10_lower, d10_upper = interpolate_d_value_with_bounds(sizes, cumsum_avg, cumsum_sd, 0.1)
                 d50_avg, d50_lower, d50_upper = interpolate_d_value_with_bounds(sizes, cumsum_avg, cumsum_sd, 0.5)
                 d90_avg, d90_lower, d90_upper = interpolate_d_value_with_bounds(sizes, cumsum_avg, cumsum_sd, 0.9)
+                
+                # Check if results are valid
+                if np.isnan(d10_avg) or np.isnan(d50_avg) or np.isnan(d90_avg):
+                    if name == 'number':
+                        print(f"    WARNING: D-values are NaN for {name}!")
+                        print(f"      d10={d10_avg}, d50={d50_avg}, d90={d90_avg}")
                 
                 # Calculate span with bounds
                 # span = (D90 - D10) / D50
@@ -1386,6 +1396,9 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
                 
             except Exception as e:
                 print(f"    Error calculating statistics for {name}: {str(e)}")
+                if name == 'number':
+                    import traceback
+                    traceback.print_exc()
     
     return stats
 
@@ -1423,7 +1436,7 @@ def add_key_statistics_to_metadata(metadata, stats):
         # Add D-values and span for each distribution type
         for dist_key, field_prefix in dist_types:
             if dist_key in linear_stats:
-                debug_info.append(f"Processing {dist_key}...")
+                debug_info.append(f"✓ {dist_key} FOUND in linear_stats")
                 dist_stats = linear_stats[dist_key]
                 
                 # Add D10, D50, D90
@@ -1450,7 +1463,7 @@ def add_key_statistics_to_metadata(metadata, stats):
                     updated_metadata[f'nta_{field_prefix}_span'] = "Not available"
                     debug_info.append(f"  ✗ {field_prefix}_span = NaN")
             else:
-                debug_info.append(f"✗ {dist_key} NOT FOUND in linear_stats!")
+                debug_info.append(f"✗ {dist_key} NOT FOUND in linear_stats - Check calculate_percentile_statistics_with_uncertainty function output above")
     else:
         debug_info.append("✗ 'linear' key not in stats!")
     
