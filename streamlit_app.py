@@ -1,7 +1,7 @@
 """
 NTA Data Analysis - Streamlit Web Application
-Updated to use combined analyzer with Cells 01-04
-Includes metadata discrepancy detection and warnings
+Updated to use combined analyzer with Cells 01-05
+Includes dilution correction, normalization, cumulative distributions, and total metrics
 """
 
 import streamlit as st
@@ -9,17 +9,17 @@ import pandas as pd
 import io
 import tempfile
 import os
-from nta_analyzer_cells_01_04 import NTAAnalyzer, CONFIG
+from nta_analyzer_cells_01_05 import NTAAnalyzer, CONFIG
 
 # Set page config
 st.set_page_config(
     page_title="NTA Analysis",
-    page_icon="🧪",
+    page_icon="ðŸ§ª",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-st.title("🧪 NTA Particle Size Analysis")
+st.title("ðŸ§ª NTA Particle Size Analysis")
 st.markdown("---")
 
 # Initialize session state
@@ -30,7 +30,7 @@ if 'results' not in st.session_state:
 
 # Sidebar configuration
 with st.sidebar:
-    st.header("⚙️ Configuration")
+    st.header("âš™ï¸ Configuration")
     
     st.subheader("Project Information")
     experimenter = st.text_input(
@@ -68,7 +68,7 @@ with st.sidebar:
         placeholder="Leave empty for auto-generation"
     )
     if manual_persistent_id:
-        st.info(f"ℹ️ Will use: {manual_persistent_id}")
+        st.info(f"â„¹ï¸ Will use: {manual_persistent_id}")
     
     # Update CONFIG with user values
     CONFIG["project_metadata"]["experimenter"] = experimenter
@@ -81,15 +81,15 @@ with st.sidebar:
     if manual_persistent_id:
         CONFIG["manual_persistent_id"] = manual_persistent_id
     
-    st.info("ℹ️ Configuration changes apply when you click 'Analyze Files'")
+    st.info("â„¹ï¸ Configuration changes apply when you click 'Analyze Files'")
     
     # Reset button
-    if st.button("🔄 Reset All"):
+    if st.button("ðŸ”„ Reset All"):
         st.session_state.clear()
         st.rerun()
 
 # Main content
-st.header("📤 Upload NTA Files")
+st.header("ðŸ“¤ Upload NTA Files")
 st.markdown("Upload one or more NTA data files (.txt format)")
 
 uploaded_files = st.file_uploader(
@@ -100,7 +100,7 @@ uploaded_files = st.file_uploader(
 )
 
 if uploaded_files:
-    if st.button("🔍 Analyze Files", key="analyze_btn", type="primary"):
+    if st.button("ðŸ” Analyze Files", key="analyze_btn", type="primary"):
         with st.spinner("Processing files..."):
             try:
                 # Create temp directory
@@ -121,10 +121,10 @@ if uploaded_files:
                     st.session_state.analyzer = analyzer
                     st.session_state.results = results
                 
-                st.success("✅ Analysis completed!")
+                st.success("âœ… Analysis completed!")
                 
             except Exception as e:
-                st.error(f"❌ Error during analysis: {str(e)}")
+                st.error(f"âŒ Error during analysis: {str(e)}")
                 st.stop()
 
 # Display results if analysis was successful
@@ -132,14 +132,14 @@ if st.session_state.results:
     results = st.session_state.results
     
     st.markdown("---")
-    st.header("📊 Analysis Results")
+    st.header("ðŸ“Š Analysis Results")
     
     # Tabs for different views
     tab1, tab2, tab3, tab4 = st.tabs([
-        "📈 Distribution Data",
-        "🔍 Metadata",
-        "⚠️ Warnings",
-        "💾 Download"
+        "ðŸ“ˆ Distribution Data",
+        "ðŸ” Metadata",
+        "âš ï¸ Warnings",
+        "ðŸ’¾ Download"
     ])
     
     # TAB 1: Distribution Data
@@ -158,7 +158,7 @@ if st.session_state.results:
             elif results['high_variation_fields']:
                 st.metric("Status", "High variation")
             else:
-                st.metric("Status", "✓ Good")
+                st.metric("Status", "âœ“ Good")
         
         # Show first 9 rows of linear data
         st.subheader("Data Preview (Linear)")
@@ -219,7 +219,7 @@ if st.session_state.results:
         
         if not has_alerts and not has_variation:
             # All good!
-            st.success("✅ No quality issues detected!")
+            st.success("âœ… No quality issues detected!")
             st.write("""
             Your measurement looks good:
             - No quality control alerts
@@ -227,18 +227,18 @@ if st.session_state.results:
             - All data consistent across replicates
             """)
         else:
-            st.subheader("⚠️ Concerning Items")
+            st.subheader("âš ï¸ Concerning Items")
             
             # Quality control alerts
             if results['quality_alerts']:
-                st.error("🚨 **Quality Control Alerts**")
+                st.error("ðŸš¨ **Quality Control Alerts**")
                 for alert in results['quality_alerts']:
                     st.write(f"- {alert}")
                 st.write("**Recommendation:** Review measurement conditions and consider if data is suitable for publication.")
             
             # High variation fields
             if results['high_variation_fields']:
-                st.warning("📊 **High Variation Between Replicates**")
+                st.warning("ðŸ“Š **High Variation Between Replicates**")
                 for field in results['high_variation_fields']:
                     st.write(f"- {field}")
                 st.write("**Recommendation:** Check sample consistency, mixing, and instrument stability.")
@@ -259,7 +259,7 @@ if st.session_state.results:
                     file_content = f.read()
                 
                 st.download_button(
-                    label=f"📥 {filename}",
+                    label=f"ðŸ“¥ {filename}",
                     data=file_content,
                     file_name=filename,
                     mime="text/plain"
@@ -282,7 +282,7 @@ if st.session_state.results:
             sample_id = results['metadata'].get('persistentID', 'analysis')
             
             st.download_button(
-                label="📦 Download All (ZIP)",
+                label="ðŸ“¦ Download All (ZIP)",
                 data=zip_buffer.getvalue(),
                 file_name=f"{sample_id}_all.zip",
                 mime="application/zip"

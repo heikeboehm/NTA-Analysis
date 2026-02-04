@@ -4,11 +4,11 @@ A web-based particle size distribution analyzer for ZetaView NTA instrument data
 
 ## Features
 
-✅ **Single & Multi-file Analysis** - Upload one or multiple NTA files  
-✅ **Automatic Averaging** - Replicate analysis with uncertainty calculation  
-✅ **Linear Number-Weighted Plots** - Publication-ready visualizations  
-✅ **Full Data Export** - Metadata, statistics, distribution data, and plots  
-✅ **Web Interface** - Streamlit cloud deployment (publicly accessible)  
+âœ… **Single & Multi-file Analysis** - Upload one or multiple NTA files  
+âœ… **Automatic Averaging** - Replicate analysis with uncertainty calculation  
+âœ… **Linear Number-Weighted Plots** - Publication-ready visualizations  
+âœ… **Full Data Export** - Metadata, statistics, distribution data, and plots  
+âœ… **Web Interface** - Streamlit cloud deployment (publicly accessible)  
 
 ## Files Included
 
