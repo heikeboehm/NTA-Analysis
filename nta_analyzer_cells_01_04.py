@@ -1404,10 +1404,14 @@ def add_key_statistics_to_metadata(metadata, stats):
     # Create a copy to avoid modifying the original
     updated_metadata = metadata.copy()
     
+    # Add debug info temporarily
+    debug_info = []
+    debug_info.append(f"stats keys: {list(stats.keys())}")
+    
     # Get linear statistics
     if 'linear' in stats:
         linear_stats = stats['linear']
-        print(f"\n   DEBUG: linear_stats keys: {list(linear_stats.keys())}")
+        debug_info.append(f"linear_stats keys: {list(linear_stats.keys())}")
         
         # Define distribution types
         dist_types = [
@@ -1418,10 +1422,9 @@ def add_key_statistics_to_metadata(metadata, stats):
         
         # Add D-values and span for each distribution type
         for dist_key, field_prefix in dist_types:
-            print(f"   DEBUG: Processing {dist_key}...")
             if dist_key in linear_stats:
+                debug_info.append(f"Processing {dist_key}...")
                 dist_stats = linear_stats[dist_key]
-                print(f"     Found {dist_key} in linear_stats")
                 
                 # Add D10, D50, D90
                 for param in ['D10', 'D50', 'D90']:
@@ -1429,31 +1432,30 @@ def add_key_statistics_to_metadata(metadata, stats):
                     lower_val = dist_stats.get(f'{param}_lower', np.nan)
                     upper_val = dist_stats.get(f'{param}_upper', np.nan)
                     
-                    print(f"     {param}: avg={avg_val}, lower={lower_val}, upper={upper_val}")
-                    
                     if not np.isnan(avg_val):
-                        value = f"{avg_val:.2f} nm ({lower_val:.2f} - {upper_val:.2f})"
-                        updated_metadata[f'nta_{field_prefix}_{param.lower()}'] = value
-                        print(f"       ✓ Added nta_{field_prefix}_{param.lower()}: {value}")
+                        updated_metadata[f'nta_{field_prefix}_{param.lower()}'] = f"{avg_val:.2f} nm ({lower_val:.2f} - {upper_val:.2f})"
+                        debug_info.append(f"  ✓ {field_prefix}_{param.lower()} = {avg_val:.2f}")
                     else:
                         updated_metadata[f'nta_{field_prefix}_{param.lower()}'] = "Not available"
-                        print(f"       ✗ {param} is NaN!")
+                        debug_info.append(f"  ✗ {field_prefix}_{param.lower()} = NaN")
                 
                 # Add span with bounds
                 span_avg = dist_stats.get('span_avg', np.nan)
                 span_lower = dist_stats.get('span_lower', np.nan)
                 span_upper = dist_stats.get('span_upper', np.nan)
-                print(f"     span: avg={span_avg}, lower={span_lower}, upper={span_upper}")
-                
                 if not np.isnan(span_avg):
-                    value = f"{span_avg:.3f} ({span_lower:.3f} - {span_upper:.3f})"
-                    updated_metadata[f'nta_{field_prefix}_span'] = value
-                    print(f"       ✓ Added nta_{field_prefix}_span: {value}")
+                    updated_metadata[f'nta_{field_prefix}_span'] = f"{span_avg:.3f} ({span_lower:.3f} - {span_upper:.3f})"
+                    debug_info.append(f"  ✓ {field_prefix}_span = {span_avg:.3f}")
                 else:
                     updated_metadata[f'nta_{field_prefix}_span'] = "Not available"
-                    print(f"       ✗ span is NaN!")
+                    debug_info.append(f"  ✗ {field_prefix}_span = NaN")
             else:
-                print(f"     ✗ {dist_key} NOT in linear_stats!")
+                debug_info.append(f"✗ {dist_key} NOT FOUND in linear_stats!")
+    else:
+        debug_info.append("✗ 'linear' key not in stats!")
+    
+    # Add debug info to metadata temporarily (will show in Metadata tab)
+    updated_metadata['_debug_d_value_calculation'] = " | ".join(debug_info)
     
     return updated_metadata
 
