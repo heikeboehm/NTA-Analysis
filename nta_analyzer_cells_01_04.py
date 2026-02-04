@@ -574,7 +574,7 @@ def smart_format_field(field_name, values):
     """
     Apply smart formatting rules based on field type and content.
     Special rules:
-    - Temperature: Alert if difference > 1°C
+    - Temperature: Alert if difference > 1Â°C
     - Dilution: Alert if any difference
     - Others: Alert if CV > 10%
     (From Cell 04)
@@ -635,7 +635,7 @@ def smart_format_field(field_name, values):
             return json.dumps(values), f"QC_ALERT_inconsistent_values"
     
     elif field_name == 'temperature':
-        # Special handling: Alert if temperature differs by more than 1°C
+        # Special handling: Alert if temperature differs by more than 1Â°C
         try:
             numeric_values = [float(v) for v in values]
             mean_val = np.mean(numeric_values)
@@ -643,11 +643,11 @@ def smart_format_field(field_name, values):
             max_range = max(numeric_values) - min(numeric_values)
             
             if max_range > 1.0:
-                notes = f"TEMPERATURE_ALERT_range_{max_range:.2f}°C"
+                notes = f"TEMPERATURE_ALERT_range_{max_range:.2f}Â°C"
             else:
                 notes = f"mean_sd_of_{len(values)}"
             
-            return f"{mean_val:.2f} ± {std_val:.2f}", notes
+            return f"{mean_val:.2f} Â± {std_val:.2f}", notes
         except ValueError:
             return json.dumps(values), "non_numeric"
     
@@ -663,7 +663,7 @@ def smart_format_field(field_name, values):
                 return values[0], "identical"
     
     else:
-        # Try to calculate mean ± SD for numeric fields
+        # Try to calculate mean Â± SD for numeric fields
         try:
             numeric_values = [float(v) for v in values]
             mean_val = np.mean(numeric_values)
@@ -677,7 +677,7 @@ def smart_format_field(field_name, values):
             else:
                 notes = f"mean_sd_of_{len(values)}"
             
-            return f"{mean_val:.2f} ± {std_val:.2f}", notes
+            return f"{mean_val:.2f} Â± {std_val:.2f}", notes
             
         except ValueError:
             # Non-numeric field - keep as array
@@ -940,8 +940,8 @@ def save_metadata_file(metadata, output_dir=None, config=None, include_headers=T
 def apply_dilution_correction_with_uncertainty(df, metadata=None, manual_dilution=None):
     """
     Apply dilution correction to all measured values with uncertainty propagation.
-    For a dilution factor D: actual sample concentration = measured × D
-    Uncertainty propagation: σ_actual = σ_measured × D
+    For a dilution factor D: actual sample concentration = measured Ã— D
+    Uncertainty propagation: Ïƒ_actual = Ïƒ_measured Ã— D
     """
     updated_df = df.copy()
     
@@ -957,7 +957,7 @@ def apply_dilution_correction_with_uncertainty(df, metadata=None, manual_dilutio
     elif metadata is not None and 'nta_dilution' in metadata:
         try:
             dilution_string = metadata['nta_dilution']
-            dilution_factor = float(dilution_string.split('±')[0].strip()) if '±' in dilution_string else float(dilution_string)
+            dilution_factor = float(dilution_string.split('Â±')[0].strip()) if 'Â±' in dilution_string else float(dilution_string)
             dilution_source = "metadata (nta_dilution)"
         except (ValueError, TypeError):
             print("Warning: Could not parse dilution factor from metadata, using default (1.0)")
@@ -1031,7 +1031,7 @@ def normalize_distributions_with_uncertainty(df, size_column='size_nm'):
 def calculate_cumulative_distributions_with_uncertainty(df, scale_column='scale'):
     """
     Calculate cumulative distributions with proper uncertainty propagation.
-    For independent uncertainties: σ_cumsum[j] = √(Σ(i=0 to j) σ[i]²)
+    For independent uncertainties: Ïƒ_cumsum[j] = âˆš(Î£(i=0 to j) Ïƒ[i]Â²)
     """
     result_df = df.copy()
     
@@ -1082,7 +1082,7 @@ def calculate_cumulative_distributions_with_uncertainty(df, scale_column='scale'
 def calculate_total_metrics_with_uncertainty(df, scale_column='scale'):
     """
     Calculate total metrics for each scale with proper uncertainty propagation.
-    For totals: σ_total = √(Σ σ_i²)
+    For totals: Ïƒ_total = âˆš(Î£ Ïƒ_iÂ²)
     """
     results = {}
     
@@ -1107,15 +1107,15 @@ def calculate_total_metrics_with_uncertainty(df, scale_column='scale'):
                 total_volume_avg = scale_df['volume_nm^3_per_mL_avg'].sum()
                 scale_metrics['total_volume_nm^3_per_mL_avg'] = total_volume_avg
                 scale_metrics['total_volume_um^3_per_mL_avg'] = total_volume_avg / 1e9
-                scale_metrics['total_volume_uL_per_mL_avg'] = total_volume_avg / 1e18
-                scale_metrics['volume_percentage_avg'] = (total_volume_avg / 1e18) * 0.1
+                scale_metrics['total_volume_uL_per_mL_avg'] = total_volume_avg / 1e15  # FIXED: 1e15, not 1e18
+                scale_metrics['volume_percentage_avg'] = (total_volume_avg / 1e15) * 0.1  # FIXED: 1e15, not 1e18
                 
                 if 'volume_nm^3_per_mL_sd' in scale_df.columns:
                     total_volume_sd = np.sqrt((scale_df['volume_nm^3_per_mL_sd'] ** 2).sum())
                     scale_metrics['total_volume_nm^3_per_mL_sd'] = total_volume_sd
                     scale_metrics['total_volume_um^3_per_mL_sd'] = total_volume_sd / 1e9
-                    scale_metrics['total_volume_uL_per_mL_sd'] = total_volume_sd / 1e18
-                    scale_metrics['volume_percentage_sd'] = (total_volume_sd / 1e18) * 0.1
+                    scale_metrics['total_volume_uL_per_mL_sd'] = total_volume_sd / 1e15  # FIXED: 1e15, not 1e18
+                    scale_metrics['volume_percentage_sd'] = (total_volume_sd / 1e15) * 0.1  # FIXED: 1e15, not 1e18
             
             # Total surface area per mL
             if 'area_nm^2_per_mL_avg' in scale_df.columns:
@@ -1170,18 +1170,18 @@ def add_metrics_to_metadata_with_uncertainty(metadata, metrics, scale='linear', 
     if 'total_particles_per_mL_avg' in scale_metrics:
         avg_val = scale_metrics['total_particles_per_mL_avg']
         sd_val = scale_metrics.get('total_particles_per_mL_sd', 0)
-        updated_metadata['nta_total_particles_per_mL'] = f"{avg_val:.2E} ± {sd_val:.2E}"
+        updated_metadata['nta_total_particles_per_mL'] = f"{avg_val:.2E} Â± {sd_val:.2E}"
     
     if 'total_volume_uL_per_mL_avg' in scale_metrics:
         avg_val = scale_metrics['total_volume_uL_per_mL_avg']
         sd_val = scale_metrics.get('total_volume_uL_per_mL_sd', 0)
-        updated_metadata['nta_total_volume_uL_per_mL'] = f"{avg_val:.4E} ± {sd_val:.4E}"
+        updated_metadata['nta_total_volume_uL_per_mL'] = f"{avg_val:.4E} Â± {sd_val:.4E}"
     
     if 'volume_percentage_avg' in scale_metrics:
         avg_val = scale_metrics['volume_percentage_avg']
         sd_val = scale_metrics.get('volume_percentage_sd', 0)
         # Use scientific notation for volume_percentage
-        updated_metadata['nta_volume_percentage'] = f"{avg_val:.6E} ± {sd_val:.6E}"
+        updated_metadata['nta_volume_percentage'] = f"{avg_val:.6E} Â± {sd_val:.6E}"
     
     if 'specific_surface_area_m^2_per_cm^3_avg' in scale_metrics:
         avg_val = scale_metrics['specific_surface_area_m^2_per_cm^3_avg']
@@ -1241,8 +1241,8 @@ def interpolate_d_value_with_bounds(sizes, cumsum_avg, cumsum_sd, target_fractio
         d_value_upper = np.interp(target_fraction, cumsum_lower, sizes_sorted)  # Note: swapped!
         
         # The swapping is because:
-        # - When cumsum is higher (cumsum + sd), we reach target fraction at smaller size → lower bound
-        # - When cumsum is lower (cumsum - sd), we reach target fraction at larger size → upper bound
+        # - When cumsum is higher (cumsum + sd), we reach target fraction at smaller size â†’ lower bound
+        # - When cumsum is lower (cumsum - sd), we reach target fraction at larger size â†’ upper bound
         
         return d_value_avg, d_value_lower, d_value_upper
         
@@ -1312,7 +1312,7 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
             # Skip if required columns don't exist
             if avg_column not in scale_df.columns or sd_column not in scale_df.columns:
                 reason = f"Missing columns for {name}: {avg_column} or {sd_column}"
-                print(f"    ✗ {reason}")
+                print(f"    âœ— {reason}")
                 skip_reasons.append(reason)
                 if name == 'number':
                     print(f"      Available columns: {list(scale_df.columns)}")
@@ -1326,7 +1326,7 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
             # Skip if all values are zero or NaN
             if np.all(cumsum_avg == 0) or np.all(np.isnan(cumsum_avg)):
                 reason = f"All values are zero or NaN for {name}: min={np.nanmin(cumsum_avg)}, max={np.nanmax(cumsum_avg)}"
-                print(f"    ✗ {reason}")
+                print(f"    âœ— {reason}")
                 skip_reasons.append(reason)
                 continue
             
@@ -1338,7 +1338,7 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
                     cumsum_sd = cumsum_sd / max_cumsum
                 else:
                     reason = f"Maximum cumsum is zero for {name}"
-                    print(f"    ✗ {reason}")
+                    print(f"    âœ— {reason}")
                     skip_reasons.append(reason)
                     continue
             
@@ -1351,7 +1351,7 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
                 # Check if results are valid
                 if np.isnan(d10_avg) or np.isnan(d50_avg) or np.isnan(d90_avg):
                     reason = f"D-values are NaN for {name}: d10={d10_avg}, d50={d50_avg}, d90={d90_avg}"
-                    print(f"    ✗ {reason}")
+                    print(f"    âœ— {reason}")
                     skip_reasons.append(reason)
                     continue
                 
@@ -1397,14 +1397,14 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
                 
                 stats[scale][name] = metrics
                 
-                print(f"    ✓ D10: {d10_avg:.2f} nm ({d10_lower:.2f} - {d10_upper:.2f})")
-                print(f"    ✓ D50: {d50_avg:.2f} nm ({d50_lower:.2f} - {d50_upper:.2f})")
-                print(f"    ✓ D90: {d90_avg:.2f} nm ({d90_lower:.2f} - {d90_upper:.2f})")
-                print(f"    ✓ Span: {span_avg:.3f} ({span_lower:.3f} - {span_upper:.3f})")
+                print(f"    âœ“ D10: {d10_avg:.2f} nm ({d10_lower:.2f} - {d10_upper:.2f})")
+                print(f"    âœ“ D50: {d50_avg:.2f} nm ({d50_lower:.2f} - {d50_upper:.2f})")
+                print(f"    âœ“ D90: {d90_avg:.2f} nm ({d90_lower:.2f} - {d90_upper:.2f})")
+                print(f"    âœ“ Span: {span_avg:.3f} ({span_lower:.3f} - {span_upper:.3f})")
                 
             except Exception as e:
                 reason = f"Exception for {name}: {str(e)}"
-                print(f"    ✗ {reason}")
+                print(f"    âœ— {reason}")
                 skip_reasons.append(reason)
                 import traceback
                 traceback.print_exc()
@@ -1453,7 +1453,7 @@ def add_key_statistics_to_metadata(metadata, stats):
         # Add D-values and span for each distribution type
         for dist_key, field_prefix in dist_types:
             if dist_key in linear_stats:
-                debug_info.append(f"✓ {dist_key} FOUND in linear_stats")
+                debug_info.append(f"âœ“ {dist_key} FOUND in linear_stats")
                 dist_stats = linear_stats[dist_key]
                 
                 # Add D10, D50, D90
@@ -1464,10 +1464,10 @@ def add_key_statistics_to_metadata(metadata, stats):
                     
                     if not np.isnan(avg_val):
                         updated_metadata[f'nta_{field_prefix}_{param.lower()}'] = f"{avg_val:.2f} nm ({lower_val:.2f} - {upper_val:.2f})"
-                        debug_info.append(f"  ✓ {field_prefix}_{param.lower()} = {avg_val:.2f}")
+                        debug_info.append(f"  âœ“ {field_prefix}_{param.lower()} = {avg_val:.2f}")
                     else:
                         updated_metadata[f'nta_{field_prefix}_{param.lower()}'] = "Not available"
-                        debug_info.append(f"  ✗ {field_prefix}_{param.lower()} = NaN")
+                        debug_info.append(f"  âœ— {field_prefix}_{param.lower()} = NaN")
                 
                 # Add span with bounds
                 span_avg = dist_stats.get('span_avg', np.nan)
@@ -1475,14 +1475,14 @@ def add_key_statistics_to_metadata(metadata, stats):
                 span_upper = dist_stats.get('span_upper', np.nan)
                 if not np.isnan(span_avg):
                     updated_metadata[f'nta_{field_prefix}_span'] = f"{span_avg:.3f} ({span_lower:.3f} - {span_upper:.3f})"
-                    debug_info.append(f"  ✓ {field_prefix}_span = {span_avg:.3f}")
+                    debug_info.append(f"  âœ“ {field_prefix}_span = {span_avg:.3f}")
                 else:
                     updated_metadata[f'nta_{field_prefix}_span'] = "Not available"
-                    debug_info.append(f"  ✗ {field_prefix}_span = NaN")
+                    debug_info.append(f"  âœ— {field_prefix}_span = NaN")
             else:
-                debug_info.append(f"✗ {dist_key} NOT FOUND in linear_stats - Check calculate_percentile_statistics_with_uncertainty function output above")
+                debug_info.append(f"âœ— {dist_key} NOT FOUND in linear_stats - Check calculate_percentile_statistics_with_uncertainty function output above")
     else:
-        debug_info.append("✗ 'linear' key not in stats!")
+        debug_info.append("âœ— 'linear' key not in stats!")
     
     # Add debug info to metadata temporarily (will show in Metadata tab)
     updated_metadata['_debug_d_value_calculation'] = " | ".join(debug_info)
@@ -1572,36 +1572,36 @@ class NTAAnalyzer:
             metadata=metadata
         )
         if success:
-            print("✓ Dilution correction completed")
+            print("âœ“ Dilution correction completed")
             avg_dist = dilution_corrected_df
         else:
-            print(f"✗ Dilution correction failed: {dilution_corrected_df}")
+            print(f"âœ— Dilution correction failed: {dilution_corrected_df}")
         
         # Step 2: Normalization
         print("\n2. Normalizing distributions with uncertainty propagation...")
         try:
             normalized_df = normalize_distributions_with_uncertainty(avg_dist)
-            print("✓ Normalization completed")
+            print("âœ“ Normalization completed")
             avg_dist = normalized_df
         except Exception as e:
-            print(f"✗ Normalization failed: {e}")
+            print(f"âœ— Normalization failed: {e}")
         
         # Step 3: Cumulative distributions
         print("\n3. Calculating cumulative distributions with uncertainty...")
         try:
             final_df = calculate_cumulative_distributions_with_uncertainty(avg_dist)
-            print("✓ Cumulative distributions calculated")
+            print("âœ“ Cumulative distributions calculated")
             avg_dist = final_df
         except Exception as e:
-            print(f"✗ Cumulative distribution calculation failed: {e}")
+            print(f"âœ— Cumulative distribution calculation failed: {e}")
         
         # Step 4: Total metrics
         print("\n4. Calculating total metrics with uncertainty...")
         try:
             total_metrics = calculate_total_metrics_with_uncertainty(avg_dist)
-            print("✓ Total metrics calculated")
+            print("âœ“ Total metrics calculated")
         except Exception as e:
-            print(f"✗ Total metrics calculation failed: {e}")
+            print(f"âœ— Total metrics calculation failed: {e}")
             total_metrics = {}
         
         # Step 5: Add metrics to metadata for saving
@@ -1612,9 +1612,9 @@ class NTAAnalyzer:
             )
             # Add analysis date
             metadata['nta_python_analysis'] = str(date.today())
-            print("✓ Metrics added to metadata")
+            print("âœ“ Metrics added to metadata")
         except Exception as e:
-            print(f"✗ Failed to add metrics to metadata: {e}")
+            print(f"âœ— Failed to add metrics to metadata: {e}")
         
         print("\n" + "="*80)
         print("CELL 05 PROCESSING COMPLETE")
@@ -1629,9 +1629,9 @@ class NTAAnalyzer:
         print("\n1. Calculating percentile statistics with uncertainty...")
         try:
             percentile_stats = calculate_percentile_statistics_with_uncertainty(avg_dist)
-            print("✓ Percentile statistics calculated")
+            print("âœ“ Percentile statistics calculated")
         except Exception as e:
-            print(f"✗ Percentile statistics calculation failed: {e}")
+            print(f"âœ— Percentile statistics calculation failed: {e}")
             percentile_stats = {}
         
         # Step 2: Add key D-values to metadata
@@ -1650,9 +1650,9 @@ class NTAAnalyzer:
             for field in sorted(d_values):
                 print(f"     - {field}: {metadata[field]}")
             
-            print(f"✓ D-values added to metadata")
+            print(f"âœ“ D-values added to metadata")
         except Exception as e:
-            print(f"✗ Failed to add D-values to metadata: {e}")
+            print(f"âœ— Failed to add D-values to metadata: {e}")
             import traceback
             traceback.print_exc()
         
@@ -1703,15 +1703,23 @@ class NTAAnalyzer:
         # ===== Save Distribution Data (Split by Scale) =====
         dist = self.results['distribution']
         
-        # Define columns needed for D-value calculation
+        # Define columns needed for D-value calculation (comprehensive, in order)
+        # CRITICAL: Must include number_normalized columns for D-value calculation
         essential_columns = [
             'size_nm',
+            # Basic count data
             'number_avg', 'number_sd',
+            # Metadata columns
             'num_replicates', 'source_files',
+            # Dilution-corrected particle concentration
             'particles_per_mL_avg', 'particles_per_mL_sd',
+            # Dilution-corrected volume
             'volume_nm^3_per_mL_avg', 'volume_nm^3_per_mL_sd',
+            # Dilution-corrected surface area
             'area_nm^2_per_mL_avg', 'area_nm^2_per_mL_sd',
+            # CRITICAL: Normalized number distribution (for D-value calculation)
             'number_normalized_avg', 'number_normalized_sd',
+            # CRITICAL: Cumulative distributions with uncertainties (for D-value calculation)
             'number_normalized_cumsum_avg', 'number_normalized_cumsum_sd',
             'volume_nm^3_per_mL_cumsum_avg', 'volume_nm^3_per_mL_cumsum_sd',
             'area_nm^2_per_mL_cumsum_avg', 'area_nm^2_per_mL_cumsum_sd'
@@ -1725,7 +1733,16 @@ class NTAAnalyzer:
             # Select only essential columns (preserving order, skipping if not present)
             cols_to_save = [col for col in essential_columns if col in linear_data.columns]
             
-            # DEBUG: Print what we're saving
+            # CRITICAL CHECK: Verify normalized columns are present
+            missing_normalized = [col for col in ['number_normalized_avg', 'number_normalized_sd', 
+                                                   'number_normalized_cumsum_avg', 'number_normalized_cumsum_sd']
+                                 if col not in cols_to_save]
+            
+            if missing_normalized:
+                print(f"\n⚠️  WARNING - Missing columns in LINEAR PSD export: {missing_normalized}")
+                print(f"   These are required for number-weighted D-value calculation!")
+                print(f"   Available columns: {sorted(linear_data.columns)}")
+            
             print(f"\nDEBUG - Saving LINEAR PSD:")
             print(f"  Total columns available: {len(linear_data.columns)}")
             print(f"  Columns to save: {len(cols_to_save)}")
@@ -1744,7 +1761,16 @@ class NTAAnalyzer:
             # Select only essential columns (preserving order, skipping if not present)
             cols_to_save = [col for col in essential_columns if col in log_data.columns]
             
-            # DEBUG: Print what we're saving
+            # CRITICAL CHECK: Verify normalized columns are present
+            missing_normalized = [col for col in ['number_normalized_avg', 'number_normalized_sd',
+                                                   'number_normalized_cumsum_avg', 'number_normalized_cumsum_sd']
+                                 if col not in cols_to_save]
+            
+            if missing_normalized:
+                print(f"\n⚠️  WARNING - Missing columns in LOGARITHMIC PSD export: {missing_normalized}")
+                print(f"   These are required for number-weighted D-value calculation!")
+                print(f"   Available columns: {sorted(log_data.columns)}")
+            
             print(f"\nDEBUG - Saving LOGARITHMIC PSD:")
             print(f"  Total columns available: {len(log_data.columns)}")
             print(f"  Columns to save: {len(cols_to_save)}")
