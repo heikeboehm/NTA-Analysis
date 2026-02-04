@@ -1584,11 +1584,25 @@ class NTAAnalyzer:
         
         # Step 2: Add key D-values to metadata
         print("\n2. Adding key D-values to metadata...")
+        print(f"   percentile_stats available: {bool(percentile_stats)}")
+        print(f"   percentile_stats keys: {list(percentile_stats.keys()) if percentile_stats else 'EMPTY'}")
         try:
+            metadata_before = len(metadata)
             metadata = add_key_statistics_to_metadata(metadata, percentile_stats)
-            print("✓ D-values added to metadata")
+            metadata_after = len(metadata)
+            print(f"   Metadata fields added: {metadata_after - metadata_before}")
+            
+            # Show D-values that were added
+            d_values = [k for k in metadata.keys() if any(p in k.lower() for p in ['d10', 'd50', 'd90', 'span'])]
+            print(f"   D-value fields in metadata: {len(d_values)}")
+            for field in sorted(d_values):
+                print(f"     - {field}: {metadata[field]}")
+            
+            print(f"✓ D-values added to metadata")
         except Exception as e:
             print(f"✗ Failed to add D-values to metadata: {e}")
+            import traceback
+            traceback.print_exc()
         
         print("\n" + "="*80)
         print("CELL 06 PROCESSING COMPLETE")
