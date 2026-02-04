@@ -1410,8 +1410,7 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
                 traceback.print_exc()
         
         # Store skip reasons in stats for debugging
-        if skip_reasons:
-            stats[scale]['_skip_reasons'] = skip_reasons
+        stats[scale]['_skip_reasons'] = skip_reasons  # Always store, even if empty
     
     return stats
 
@@ -1699,13 +1698,28 @@ class NTAAnalyzer:
         # ===== Save Distribution Data (Split by Scale) =====
         dist = self.results['distribution']
         
+        # Define columns needed for D-value calculation
+        essential_columns = [
+            'size_nm',
+            'number_avg', 'number_sd',
+            'num_replicates', 'source_files',
+            'particles_per_mL_avg', 'particles_per_mL_sd',
+            'volume_nm^3_per_mL_avg', 'volume_nm^3_per_mL_sd',
+            'area_nm^2_per_mL_avg', 'area_nm^2_per_mL_sd',
+            'number_normalized_avg', 'number_normalized_sd',
+            'number_normalized_cumsum_avg', 'number_normalized_cumsum_sd',
+            'volume_nm^3_per_mL_cumsum_avg', 'volume_nm^3_per_mL_cumsum_sd',
+            'area_nm^2_per_mL_cumsum_avg', 'area_nm^2_per_mL_cumsum_sd'
+        ]
+        
         # Linear scale
         linear_data = dist[dist['scale'] == 'linear'].copy()
         if not linear_data.empty:
             linear_path = os.path.join(output_dir, f'Data_{unique_id}_PSD_LINEAR.txt')
             
-            # Save data without headers
-            linear_data_export = linear_data.drop('scale', axis=1)
+            # Select only essential columns (preserving order, skipping if not present)
+            cols_to_save = [col for col in essential_columns if col in linear_data.columns]
+            linear_data_export = linear_data[cols_to_save]
             linear_data_export.to_csv(linear_path, sep='\t', index=False)
             
             created_files.append(linear_path)
@@ -1715,8 +1729,9 @@ class NTAAnalyzer:
         if not log_data.empty:
             log_path = os.path.join(output_dir, f'Data_{unique_id}_PSD_LOGARITHMIC.txt')
             
-            # Save data without headers
-            log_data_export = log_data.drop('scale', axis=1)
+            # Select only essential columns (preserving order, skipping if not present)
+            cols_to_save = [col for col in essential_columns if col in log_data.columns]
+            log_data_export = log_data[cols_to_save]
             log_data_export.to_csv(log_path, sep='\t', index=False)
             
             created_files.append(log_path)
