@@ -1516,6 +1516,10 @@ class NTAAnalyzer:
     def process(self, filepaths):
         """Process NTA files with full workflow."""
         
+        print("\n" + "="*80)
+        print("NTA ANALYZER - VERSION: 2026-02-04 (WITH NORMALIZED COLUMNS IN PSD)")
+        print("="*80 + "\n")
+        
         if isinstance(filepaths, str):
             filepaths = [filepaths]
         
