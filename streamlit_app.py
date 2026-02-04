@@ -7,6 +7,11 @@ import streamlit as st
 import pandas as pd
 import tempfile
 import os
+import sys
+
+# Add current directory to path to find nta_analyzer
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from nta_analyzer_cells_01_05 import run_analysis_pipeline, CONFIG
 
 # Set page config
@@ -98,7 +103,8 @@ if st.button("Analyze Files", type="primary"):
                 
             except Exception as e:
                 st.error(f"Error during analysis: {str(e)}")
-                st.stop()
+                import traceback
+                st.error(traceback.format_exc())
 
 # Display results if analysis was successful
 if st.session_state.results is not None:
@@ -148,9 +154,13 @@ if st.session_state.results is not None:
         
         field_analysis = results['field_analysis']
         if field_analysis:
+            has_alerts = False
             for field, analysis in field_analysis.items():
                 if analysis.get('alert'):
                     st.warning(f"**{field}**: {analysis.get('alert_message', 'Alert detected')}")
+                    has_alerts = True
+            if not has_alerts:
+                st.success("No quality issues detected!")
         else:
             st.success("No quality issues detected!")
     
@@ -191,4 +201,4 @@ else:
     st.info("Upload NTA files and click 'Analyze Files' to begin")
 
 st.markdown("---")
-st.markdown("**NTA Analysis** | Cells 01-05 | With dilution correction, normalization, cumulative distributions")
+st.markdown("**NTA Analysis** | Cells 01-05 | Dilution correction, normalization, cumulative distributions")
