@@ -1679,101 +1679,68 @@ class NTAAnalyzer:
     
     def save_psd_file(self, dist, scale_name, output_dir, unique_id):
         """
-        Save PSD (Particle Size Distribution) file with clean, explicit column selection.
-        Ensures all necessary columns for D-value calculation are present.
+        Save PSD (Particle Size Distribution) file with ALL available columns.
+        Always saves the file - does NOT fail if columns are missing.
         """
-        # Filter data for this scale
-        scale_data = dist[dist['scale'] == scale_name].copy()
-        
-        if scale_data.empty:
-            print(f"WARNING: No data for scale '{scale_name}'")
-            return None
-        
-        # Define columns in logical order
-        # Group 1: Size bin information
-        cols_group1 = ['size_nm']
-        
-        # Group 2: Raw number counts
-        cols_group2 = ['number_avg', 'number_sd']
-        
-        # Group 3: Metadata
-        cols_group3 = ['num_replicates', 'source_files']
-        
-        # Group 4: Dilution-corrected particle concentration
-        cols_group4 = ['particles_per_mL_avg', 'particles_per_mL_sd']
-        
-        # Group 5: Dilution-corrected volume
-        cols_group5 = ['volume_nm^3_per_mL_avg', 'volume_nm^3_per_mL_sd']
-        
-        # Group 6: Dilution-corrected surface area
-        cols_group6 = ['area_nm^2_per_mL_avg', 'area_nm^2_per_mL_sd']
-        
-        # Group 7: CRITICAL - Normalized number (for D-value calculation)
-        cols_group7 = ['number_normalized_avg', 'number_normalized_sd']
-        
-        # Group 8: CRITICAL - Cumulative number normalized (for D-value calculation)
-        cols_group8 = ['number_normalized_cumsum_avg', 'number_normalized_cumsum_sd']
-        
-        # Group 9: Cumulative volume
-        cols_group9 = ['volume_nm^3_per_mL_cumsum_avg', 'volume_nm^3_per_mL_cumsum_sd']
-        
-        # Group 10: Cumulative surface area
-        cols_group10 = ['area_nm^2_per_mL_cumsum_avg', 'area_nm^2_per_mL_cumsum_sd']
-        
-        # Combine all columns in order
-        all_cols = (cols_group1 + cols_group2 + cols_group3 + cols_group4 + 
-                   cols_group5 + cols_group6 + cols_group7 + cols_group8 + 
-                   cols_group9 + cols_group10)
-        
-        # Check which columns exist in the data
-        cols_to_save = []
-        cols_missing = []
-        
-        for col in all_cols:
-            if col in scale_data.columns:
-                cols_to_save.append(col)
+        try:
+            # Filter data for this scale
+            scale_data = dist[dist['scale'] == scale_name].copy()
+            
+            if scale_data.empty:
+                print(f"WARNING: No data for scale '{scale_name}'")
+                return None
+            
+            # Save with ALL columns available in the dataframe
+            cols_to_save = list(scale_data.columns)
+            
+            # Remove 'scale' column if present (not needed in export)
+            if 'scale' in cols_to_save:
+                cols_to_save.remove('scale')
+            
+            # Create output filename
+            scale_label = 'LINEAR' if scale_name == 'linear' else 'LOGARITHMIC'
+            output_path = os.path.join(output_dir, f'Data_{unique_id}_PSD_{scale_label}.txt')
+            
+            # Create output dataframe with all columns
+            output_df = scale_data[cols_to_save].copy()
+            
+            # Save to file
+            output_df.to_csv(output_path, sep='\t', index=False)
+            
+            # Print summary with diagnostics
+            print(f"\nSaved {scale_label} PSD file:")
+            print(f"  File: {os.path.basename(output_path)}")
+            print(f"  Rows: {len(output_df)}")
+            print(f"  Columns: {len(cols_to_save)}")
+            
+            # Check for critical columns
+            critical_cols = ['number_normalized_avg', 'number_normalized_sd', 
+                            'number_normalized_cumsum_avg', 'number_normalized_cumsum_sd']
+            present_critical = [col for col in critical_cols if col in cols_to_save]
+            missing_critical = [col for col in critical_cols if col not in cols_to_save]
+            
+            if present_critical:
+                print(f"  Critical columns present: {len(present_critical)}/4")
+                for col in present_critical:
+                    print(f"    [OK] {col}")
+            
+            if missing_critical:
+                print(f"  WARNING: Missing critical columns: {len(missing_critical)}/4")
+                for col in missing_critical:
+                    print(f"    [MISSING] {col}")
+                print(f"  Available columns in dataframe:")
+                for col in sorted(cols_to_save):
+                    print(f"    - {col}")
             else:
-                cols_missing.append(col)
+                print(f"  OK: All critical columns present")
+            
+            return output_path
         
-        # Verify critical columns are present
-        critical_cols = ['number_normalized_avg', 'number_normalized_sd', 
-                        'number_normalized_cumsum_avg', 'number_normalized_cumsum_sd']
-        missing_critical = [col for col in critical_cols if col not in cols_to_save]
-        
-        if missing_critical:
-            print(f"\nERROR: Missing CRITICAL columns in {scale_name} scale:")
-            for col in missing_critical:
-                print(f"  - {col}")
-            print(f"\nAvailable columns: {sorted(scale_data.columns)}")
+        except Exception as e:
+            print(f"\nERROR saving {scale_name} PSD file: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return None
-        
-        # Save the file
-        scale_label = 'LINEAR' if scale_name == 'linear' else 'LOGARITHMIC'
-        output_path = os.path.join(output_dir, f'Data_{unique_id}_PSD_{scale_label}.txt')
-        
-        # Create output dataframe with selected columns
-        output_df = scale_data[cols_to_save].copy()
-        
-        # Save to file
-        output_df.to_csv(output_path, sep='\t', index=False)
-        
-        # Print summary
-        print(f"\nSaved {scale_label} PSD file:")
-        print(f"  File: {os.path.basename(output_path)}")
-        print(f"  Rows: {len(output_df)}")
-        print(f"  Columns: {len(cols_to_save)}")
-        print(f"  Missing columns: {len(cols_missing)}")
-        
-        if cols_missing:
-            print(f"  (Not critical) Missing: {cols_missing}")
-        
-        # Verify critical columns are in the file
-        print(f"  Critical columns present:")
-        for col in critical_cols:
-            status = "YES" if col in cols_to_save else "NO"
-            print(f"    - {col}: {status}")
-        
-        return output_path
 
     def save_outputs(self, output_dir):
         """Save all outputs with proper organization."""
