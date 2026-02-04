@@ -1298,6 +1298,9 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
         # Sort data by size
         scale_df = scale_df.sort_values(size_column)
         
+        # Store skip reasons for debugging
+        skip_reasons = []
+        
         # Process each cumulative distribution type
         for config in cumsum_configs:
             name = config['name']
@@ -1308,7 +1311,9 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
             
             # Skip if required columns don't exist
             if avg_column not in scale_df.columns or sd_column not in scale_df.columns:
-                print(f"    Skipping - missing columns: {avg_column} or {sd_column}")
+                reason = f"Missing columns for {name}: {avg_column} or {sd_column}"
+                print(f"    ✗ {reason}")
+                skip_reasons.append(reason)
                 if name == 'number':
                     print(f"      Available columns: {list(scale_df.columns)}")
                 continue
@@ -1320,9 +1325,9 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
             
             # Skip if all values are zero or NaN
             if np.all(cumsum_avg == 0) or np.all(np.isnan(cumsum_avg)):
-                print(f"    Skipping - all cumsum values are zero or NaN")
-                if name == 'number':
-                    print(f"      Min: {np.nanmin(cumsum_avg)}, Max: {np.nanmax(cumsum_avg)}, NaN count: {np.sum(np.isnan(cumsum_avg))}")
+                reason = f"All values are zero or NaN for {name}: min={np.nanmin(cumsum_avg)}, max={np.nanmax(cumsum_avg)}"
+                print(f"    ✗ {reason}")
+                skip_reasons.append(reason)
                 continue
             
             # For absolute distributions (volume, surface area), normalize to 0-1 for D-value calculation
@@ -1332,7 +1337,9 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
                     cumsum_avg = cumsum_avg / max_cumsum
                     cumsum_sd = cumsum_sd / max_cumsum
                 else:
-                    print(f"    Skipping - maximum cumsum is zero")
+                    reason = f"Maximum cumsum is zero for {name}"
+                    print(f"    ✗ {reason}")
+                    skip_reasons.append(reason)
                     continue
             
             # Calculate D10, D50, D90 with asymmetric bounds
@@ -1343,9 +1350,10 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
                 
                 # Check if results are valid
                 if np.isnan(d10_avg) or np.isnan(d50_avg) or np.isnan(d90_avg):
-                    if name == 'number':
-                        print(f"    WARNING: D-values are NaN for {name}!")
-                        print(f"      d10={d10_avg}, d50={d50_avg}, d90={d90_avg}")
+                    reason = f"D-values are NaN for {name}: d10={d10_avg}, d50={d50_avg}, d90={d90_avg}"
+                    print(f"    ✗ {reason}")
+                    skip_reasons.append(reason)
+                    continue
                 
                 # Calculate span with bounds
                 # span = (D90 - D10) / D50
@@ -1395,10 +1403,15 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
                 print(f"    ✓ Span: {span_avg:.3f} ({span_lower:.3f} - {span_upper:.3f})")
                 
             except Exception as e:
-                print(f"    Error calculating statistics for {name}: {str(e)}")
-                if name == 'number':
-                    import traceback
-                    traceback.print_exc()
+                reason = f"Exception for {name}: {str(e)}"
+                print(f"    ✗ {reason}")
+                skip_reasons.append(reason)
+                import traceback
+                traceback.print_exc()
+        
+        # Store skip reasons in stats for debugging
+        if skip_reasons:
+            stats[scale]['_skip_reasons'] = skip_reasons
     
     return stats
 
@@ -1424,7 +1437,12 @@ def add_key_statistics_to_metadata(metadata, stats):
     # Get linear statistics
     if 'linear' in stats:
         linear_stats = stats['linear']
-        debug_info.append(f"linear_stats keys: {list(linear_stats.keys())}")
+        
+        # Check for skip reasons
+        if '_skip_reasons' in linear_stats:
+            debug_info.append(f"SKIP REASONS: {linear_stats['_skip_reasons']}")
+        
+        debug_info.append(f"linear_stats keys: {list([k for k in linear_stats.keys() if k != '_skip_reasons'])}")
         
         # Define distribution types
         dist_types = [
