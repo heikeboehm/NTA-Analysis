@@ -1497,6 +1497,8 @@ def add_key_statistics_to_metadata(metadata, stats):
 class NTAAnalyzer:
     """
     Main NTA analysis class integrating all cells 01-06.
+    VERSION: 2026-02-04-WITH-NORMALIZED-COLUMNS
+    """
     
     Complete workflow:
     1. Read multiple files (Cell 02)
