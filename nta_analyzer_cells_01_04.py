@@ -1,5 +1,5 @@
 """
-NTA Data Analysis - Complete Integrated Script (Cells 01-05)
+NTA Data Analysis - Complete Integrated Script (Cells 01-06)
 
 This script combines all functions from your original notebook:
 - Cell 01: Configuration & utilities
@@ -7,6 +7,7 @@ This script combines all functions from your original notebook:
 - Cell 03: Data extraction & averaging
 - Cell 04: Metadata extraction & analysis
 - Cell 05: Dilution correction, normalization, cumulative distributions, total metrics
+- Cell 06: Statistics with bounds-based uncertainty (D-values, percentiles, span)
 
 All code is extracted from your EXACT notebook, adapted for Streamlit.
 """
@@ -872,7 +873,18 @@ def save_metadata_file(metadata, output_dir=None, config=None, include_headers=T
                     'nta_particle_drift_check_result', 'nta_cell_check_result'
                 ],
                 'FILE REFERENCES': [
-                    'nta_processed_file', 'source_files', 'meta_version', 'python_analysis'
+                    'nta_processed_file', 'source_files', 'meta_version'
+                ],
+                'CALCULATIONS': [
+                    'nta_python_analysis', 'nta_metrics_scale',
+                    'nta_specific_surface_area_m^2_per_cm^3',
+                    'nta_total_particles_per_mL',
+                    'nta_total_volume_uL_per_mL',
+                    'nta_volume_percentage',
+                    'nta_linear_number_d10',
+                    'nta_linear_number_d50',
+                    'nta_linear_number_d90',
+                    'nta_linear_number_span'
                 ],
                 'QUALITY ALERTS': [
                     'quality_control_alerts', 'high_variation_fields'
@@ -1167,11 +1179,249 @@ def add_metrics_to_metadata_with_uncertainty(metadata, metrics, scale='linear', 
         avg_val = scale_metrics['specific_surface_area_m^2_per_cm^3_avg']
         updated_metadata['nta_specific_surface_area_m^2_per_cm^3'] = f"{avg_val:.2f}"
     
-    # Add scale and replicate info
+    # Add scale info (but NOT replicates - it's already in metadata)
     updated_metadata['nta_metrics_scale'] = scale
     
-    if num_replicates is not None:
-        updated_metadata['nta_metrics_replicates'] = str(num_replicates)
+    return updated_metadata
+
+
+# ============================================================================
+# CELL 06: STATISTICS WITH BOUNDS-BASED UNCERTAINTY PROPAGATION
+# ============================================================================
+
+def interpolate_d_value_with_bounds(sizes, cumsum_avg, cumsum_sd, target_fraction):
+    """
+    Calculate D-value with asymmetric confidence bounds using bounds approach.
+    
+    Parameters:
+    sizes (array): Size values (nm)
+    cumsum_avg (array): Average cumulative distribution values
+    cumsum_sd (array): Standard deviation of cumulative distribution values
+    target_fraction (float): Target fraction (e.g., 0.1 for D10, 0.5 for D50)
+    
+    Returns:
+    tuple: (d_value_avg, d_value_lower, d_value_upper)
+    """
+    # Ensure arrays are sorted by size
+    sorted_indices = np.argsort(sizes)
+    sizes_sorted = sizes[sorted_indices]
+    cumsum_avg_sorted = cumsum_avg[sorted_indices]
+    cumsum_sd_sorted = cumsum_sd[sorted_indices]
+    
+    # Calculate bounds
+    cumsum_lower = cumsum_avg_sorted - cumsum_sd_sorted
+    cumsum_upper = cumsum_avg_sorted + cumsum_sd_sorted
+    
+    # Ensure cumulative distributions are monotonic and in valid range [0,1]
+    cumsum_avg_sorted = np.clip(cumsum_avg_sorted, 0, 1)
+    cumsum_lower = np.clip(cumsum_lower, 0, 1)
+    cumsum_upper = np.clip(cumsum_upper, 0, 1)
+    
+    # Ensure monotonicity by taking cumulative maximum
+    cumsum_avg_sorted = np.maximum.accumulate(cumsum_avg_sorted)
+    cumsum_lower = np.maximum.accumulate(cumsum_lower)
+    cumsum_upper = np.maximum.accumulate(cumsum_upper)
+    
+    # Check if target fraction is achievable
+    if target_fraction < cumsum_avg_sorted[0] or target_fraction > cumsum_avg_sorted[-1]:
+        return np.nan, np.nan, np.nan
+    
+    # Interpolate D-values
+    try:
+        d_value_avg = np.interp(target_fraction, cumsum_avg_sorted, sizes_sorted)
+        d_value_lower = np.interp(target_fraction, cumsum_upper, sizes_sorted)  # Note: swapped!
+        d_value_upper = np.interp(target_fraction, cumsum_lower, sizes_sorted)  # Note: swapped!
+        
+        # The swapping is because:
+        # - When cumsum is higher (cumsum + sd), we reach target fraction at smaller size → lower bound
+        # - When cumsum is lower (cumsum - sd), we reach target fraction at larger size → upper bound
+        
+        return d_value_avg, d_value_lower, d_value_upper
+        
+    except Exception as e:
+        print(f"Error in interpolation for target fraction {target_fraction}: {e}")
+        return np.nan, np.nan, np.nan
+
+
+def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
+    """
+    Calculate percentile statistics (D10, D50, D90, span) with uncertainties for all
+    cumulative distributions (number, volume, surface area) and scales.
+    
+    Parameters:
+    df (DataFrame): DataFrame containing size and cumulative distribution data with uncertainties
+    size_column (str): Column name for particle sizes
+    
+    Returns:
+    dict: Nested dictionary of statistics by scale, distribution type, and metric
+    """
+    # Initialize results dictionary
+    stats = {'linear': {}, 'logarithmic': {}}
+    
+    # Define cumulative distribution configurations
+    cumsum_configs = [
+        {
+            'name': 'number',
+            'avg_column': 'number_normalized_cumsum_avg',
+            'sd_column': 'number_normalized_cumsum_sd'
+        },
+        {
+            'name': 'volume',
+            'avg_column': 'volume_nm^3_per_mL_cumsum_avg', 
+            'sd_column': 'volume_nm^3_per_mL_cumsum_sd'
+        },
+        {
+            'name': 'surface_area',
+            'avg_column': 'area_nm^2_per_mL_cumsum_avg',
+            'sd_column': 'area_nm^2_per_mL_cumsum_sd'
+        }
+    ]
+    
+    # Process each scale
+    for scale in ['linear', 'logarithmic']:
+        print(f"\nCalculating statistics for {scale.upper()} scale:")
+        
+        # Filter data for this scale
+        scale_df = df[df['scale'] == scale].copy()
+        if scale_df.empty:
+            print(f"  No data available for {scale} scale")
+            continue
+            
+        # Sort data by size
+        scale_df = scale_df.sort_values(size_column)
+        
+        # Process each cumulative distribution type
+        for config in cumsum_configs:
+            name = config['name']
+            avg_column = config['avg_column']
+            sd_column = config['sd_column']
+            
+            print(f"  Processing {name}-weighted distribution...")
+            
+            # Skip if required columns don't exist
+            if avg_column not in scale_df.columns or sd_column not in scale_df.columns:
+                print(f"    Skipping - missing columns: {avg_column} or {sd_column}")
+                continue
+            
+            # Extract data arrays
+            sizes = scale_df[size_column].values
+            cumsum_avg = scale_df[avg_column].values
+            cumsum_sd = scale_df[sd_column].values
+            
+            # Skip if all values are zero or NaN
+            if np.all(cumsum_avg == 0) or np.all(np.isnan(cumsum_avg)):
+                print(f"    Skipping - all cumsum values are zero or NaN")
+                continue
+            
+            # For absolute distributions (volume, surface area), normalize to 0-1 for D-value calculation
+            if name in ['volume', 'surface_area']:
+                max_cumsum = np.nanmax(cumsum_avg)
+                if max_cumsum > 0:
+                    cumsum_avg = cumsum_avg / max_cumsum
+                    cumsum_sd = cumsum_sd / max_cumsum
+                else:
+                    print(f"    Skipping - maximum cumsum is zero")
+                    continue
+            
+            # Calculate D10, D50, D90 with asymmetric bounds
+            try:
+                d10_avg, d10_lower, d10_upper = interpolate_d_value_with_bounds(sizes, cumsum_avg, cumsum_sd, 0.1)
+                d50_avg, d50_lower, d50_upper = interpolate_d_value_with_bounds(sizes, cumsum_avg, cumsum_sd, 0.5)
+                d90_avg, d90_lower, d90_upper = interpolate_d_value_with_bounds(sizes, cumsum_avg, cumsum_sd, 0.9)
+                
+                # Calculate span with bounds
+                # span = (D90 - D10) / D50
+                if not np.isnan(d10_avg) and not np.isnan(d50_avg) and not np.isnan(d90_avg) and d50_avg > 0:
+                    span_avg = (d90_avg - d10_avg) / d50_avg
+                    
+                    # For span bounds, consider which combinations give min/max
+                    possible_spans = [
+                        (d90_lower - d10_upper) / d50_upper,
+                        (d90_lower - d10_upper) / d50_lower,
+                        (d90_upper - d10_lower) / d50_upper,
+                        (d90_upper - d10_lower) / d50_lower
+                    ]
+                    
+                    # Filter out invalid spans
+                    valid_spans = [s for s in possible_spans if not np.isnan(s) and np.isfinite(s)]
+                    
+                    if valid_spans:
+                        span_lower = min(valid_spans)
+                        span_upper = max(valid_spans)
+                    else:
+                        span_lower, span_upper = np.nan, np.nan
+                else:
+                    span_avg, span_lower, span_upper = np.nan, np.nan, np.nan
+                
+                # Store results with bounds
+                metrics = {
+                    'D10_avg': d10_avg,
+                    'D10_lower': d10_lower,
+                    'D10_upper': d10_upper,
+                    'D50_avg': d50_avg,
+                    'D50_lower': d50_lower,
+                    'D50_upper': d50_upper,
+                    'D90_avg': d90_avg,
+                    'D90_lower': d90_lower,
+                    'D90_upper': d90_upper,
+                    'span_avg': span_avg,
+                    'span_lower': span_lower,
+                    'span_upper': span_upper
+                }
+                
+                stats[scale][name] = metrics
+                
+                print(f"    ✓ D10: {d10_avg:.2f} nm ({d10_lower:.2f} - {d10_upper:.2f})")
+                print(f"    ✓ D50: {d50_avg:.2f} nm ({d50_lower:.2f} - {d50_upper:.2f})")
+                print(f"    ✓ D90: {d90_avg:.2f} nm ({d90_lower:.2f} - {d90_upper:.2f})")
+                print(f"    ✓ Span: {span_avg:.3f} ({span_lower:.3f} - {span_upper:.3f})")
+                
+            except Exception as e:
+                print(f"    Error calculating statistics for {name}: {str(e)}")
+    
+    return stats
+
+
+def add_key_statistics_to_metadata(metadata, stats):
+    """
+    Add key D-values (linear number-weighted D10, D50, D90) to metadata.
+    
+    Parameters:
+    metadata (dict): Current metadata dictionary
+    stats (dict): Dictionary with calculated statistics
+    
+    Returns:
+    dict: Updated metadata dictionary
+    """
+    # Create a copy to avoid modifying the original
+    updated_metadata = metadata.copy()
+    
+    # Get linear number-weighted statistics
+    if ('linear' in stats and 
+        'number' in stats['linear'] and 
+        stats['linear']['number']):
+        
+        linear_number_stats = stats['linear']['number']
+        
+        # Add D-values with bounds to metadata
+        for param in ['D10', 'D50', 'D90']:
+            avg_val = linear_number_stats.get(f'{param}_avg', np.nan)
+            lower_val = linear_number_stats.get(f'{param}_lower', np.nan)
+            upper_val = linear_number_stats.get(f'{param}_upper', np.nan)
+            
+            if not np.isnan(avg_val):
+                updated_metadata[f'nta_linear_number_{param.lower()}'] = f"{avg_val:.2f} nm ({lower_val:.2f} - {upper_val:.2f})"
+            else:
+                updated_metadata[f'nta_linear_number_{param.lower()}'] = "Not available"
+        
+        # Add span with bounds
+        span_avg = linear_number_stats.get('span_avg', np.nan)
+        span_lower = linear_number_stats.get('span_lower', np.nan)
+        span_upper = linear_number_stats.get('span_upper', np.nan)
+        if not np.isnan(span_avg):
+            updated_metadata['nta_linear_number_span'] = f"{span_avg:.3f} ({span_lower:.3f} - {span_upper:.3f})"
+        else:
+            updated_metadata['nta_linear_number_span'] = "Not available"
     
     return updated_metadata
 
@@ -1182,13 +1432,15 @@ def add_metrics_to_metadata_with_uncertainty(metadata, metrics, scale='linear', 
 
 class NTAAnalyzer:
     """
-    Main NTA analysis class integrating all cells 01-04.
+    Main NTA analysis class integrating all cells 01-06.
     
     Complete workflow:
     1. Read multiple files (Cell 02)
     2. Extract and average distributions (Cell 03)
     3. Extract and analyze metadata from all files (Cell 04)
-    4. Generate standardized outputs
+    4. Apply dilution correction, normalization, cumulative distributions (Cell 05)
+    5. Calculate percentile statistics with uncertainty (D-values, span) (Cell 06)
+    6. Generate standardized outputs
     """
     
     def __init__(self, config=None):
@@ -1289,6 +1541,8 @@ class NTAAnalyzer:
             metadata = add_metrics_to_metadata_with_uncertainty(
                 metadata, total_metrics, scale='linear', num_replicates=len(successful_files)
             )
+            # Add analysis date
+            metadata['nta_python_analysis'] = str(date.today())
             print("✓ Metrics added to metadata")
         except Exception as e:
             print(f"✗ Failed to add metrics to metadata: {e}")
@@ -1297,10 +1551,37 @@ class NTAAnalyzer:
         print("CELL 05 PROCESSING COMPLETE")
         print("="*80 + "\n")
         
+        # ===== CELL 06: STATISTICS WITH UNCERTAINTY PROPAGATION =====
+        print("="*80)
+        print("EXECUTING CELL 06: STATISTICS WITH UNCERTAINTY PROPAGATION")
+        print("="*80)
+        
+        # Step 1: Calculate percentile statistics (D10, D50, D90, span)
+        print("\n1. Calculating percentile statistics with uncertainty...")
+        try:
+            percentile_stats = calculate_percentile_statistics_with_uncertainty(avg_dist)
+            print("✓ Percentile statistics calculated")
+        except Exception as e:
+            print(f"✗ Percentile statistics calculation failed: {e}")
+            percentile_stats = {}
+        
+        # Step 2: Add key D-values to metadata
+        print("\n2. Adding key D-values to metadata...")
+        try:
+            metadata = add_key_statistics_to_metadata(metadata, percentile_stats)
+            print("✓ D-values added to metadata")
+        except Exception as e:
+            print(f"✗ Failed to add D-values to metadata: {e}")
+        
+        print("\n" + "="*80)
+        print("CELL 06 PROCESSING COMPLETE")
+        print("="*80 + "\n")
+        
         self.results = {
             'distribution': avg_dist,
             'metadata': metadata,
             'total_metrics': total_metrics,
+            'percentile_stats': percentile_stats,
             'identical_fields': identical,
             'different_fields': different,
             'field_analysis': analysis,

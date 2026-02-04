@@ -292,16 +292,26 @@ if st.session_state.results:
                         'Field': f'nta_specific_surface_area_m^2_per_cm^3',
                         'Value': f'{avg:.2f}'
                     })
-            
-            # Add metadata about metrics
+            # Add metrics_scale (replicates already in metadata)
             metrics_rows.append({
                 'Field': 'nta_metrics_scale',
                 'Value': 'linear'
             })
-            metrics_rows.append({
-                'Field': 'nta_metrics_replicates',
-                'Value': str(results['num_replicates'])
-            })
+            
+            # Add D-values if available
+            d_value_fields = [
+                'nta_linear_number_d10',
+                'nta_linear_number_d50',
+                'nta_linear_number_d90',
+                'nta_linear_number_span'
+            ]
+            
+            for field in d_value_fields:
+                if field in results['metadata']:
+                    metrics_rows.append({
+                        'Field': field,
+                        'Value': results['metadata'][field]
+                    })
             
             if metrics_rows:
                 metrics_df = pd.DataFrame(metrics_rows)
