@@ -1677,6 +1677,104 @@ class NTAAnalyzer:
         
         return self.results
     
+    def save_psd_file(self, dist, scale_name, output_dir, unique_id):
+        """
+        Save PSD (Particle Size Distribution) file with clean, explicit column selection.
+        Ensures all necessary columns for D-value calculation are present.
+        """
+        # Filter data for this scale
+        scale_data = dist[dist['scale'] == scale_name].copy()
+        
+        if scale_data.empty:
+            print(f"WARNING: No data for scale '{scale_name}'")
+            return None
+        
+        # Define columns in logical order
+        # Group 1: Size bin information
+        cols_group1 = ['size_nm']
+        
+        # Group 2: Raw number counts
+        cols_group2 = ['number_avg', 'number_sd']
+        
+        # Group 3: Metadata
+        cols_group3 = ['num_replicates', 'source_files']
+        
+        # Group 4: Dilution-corrected particle concentration
+        cols_group4 = ['particles_per_mL_avg', 'particles_per_mL_sd']
+        
+        # Group 5: Dilution-corrected volume
+        cols_group5 = ['volume_nm^3_per_mL_avg', 'volume_nm^3_per_mL_sd']
+        
+        # Group 6: Dilution-corrected surface area
+        cols_group6 = ['area_nm^2_per_mL_avg', 'area_nm^2_per_mL_sd']
+        
+        # Group 7: CRITICAL - Normalized number (for D-value calculation)
+        cols_group7 = ['number_normalized_avg', 'number_normalized_sd']
+        
+        # Group 8: CRITICAL - Cumulative number normalized (for D-value calculation)
+        cols_group8 = ['number_normalized_cumsum_avg', 'number_normalized_cumsum_sd']
+        
+        # Group 9: Cumulative volume
+        cols_group9 = ['volume_nm^3_per_mL_cumsum_avg', 'volume_nm^3_per_mL_cumsum_sd']
+        
+        # Group 10: Cumulative surface area
+        cols_group10 = ['area_nm^2_per_mL_cumsum_avg', 'area_nm^2_per_mL_cumsum_sd']
+        
+        # Combine all columns in order
+        all_cols = (cols_group1 + cols_group2 + cols_group3 + cols_group4 + 
+                   cols_group5 + cols_group6 + cols_group7 + cols_group8 + 
+                   cols_group9 + cols_group10)
+        
+        # Check which columns exist in the data
+        cols_to_save = []
+        cols_missing = []
+        
+        for col in all_cols:
+            if col in scale_data.columns:
+                cols_to_save.append(col)
+            else:
+                cols_missing.append(col)
+        
+        # Verify critical columns are present
+        critical_cols = ['number_normalized_avg', 'number_normalized_sd', 
+                        'number_normalized_cumsum_avg', 'number_normalized_cumsum_sd']
+        missing_critical = [col for col in critical_cols if col not in cols_to_save]
+        
+        if missing_critical:
+            print(f"\nERROR: Missing CRITICAL columns in {scale_name} scale:")
+            for col in missing_critical:
+                print(f"  - {col}")
+            print(f"\nAvailable columns: {sorted(scale_data.columns)}")
+            return None
+        
+        # Save the file
+        scale_label = 'LINEAR' if scale_name == 'linear' else 'LOGARITHMIC'
+        output_path = os.path.join(output_dir, f'Data_{unique_id}_PSD_{scale_label}.txt')
+        
+        # Create output dataframe with selected columns
+        output_df = scale_data[cols_to_save].copy()
+        
+        # Save to file
+        output_df.to_csv(output_path, sep='\t', index=False)
+        
+        # Print summary
+        print(f"\nSaved {scale_label} PSD file:")
+        print(f"  File: {os.path.basename(output_path)}")
+        print(f"  Rows: {len(output_df)}")
+        print(f"  Columns: {len(cols_to_save)}")
+        print(f"  Missing columns: {len(cols_missing)}")
+        
+        if cols_missing:
+            print(f"  (Not critical) Missing: {cols_missing}")
+        
+        # Verify critical columns are in the file
+        print(f"  Critical columns present:")
+        for col in critical_cols:
+            status = "YES" if col in cols_to_save else "NO"
+            print(f"    - {col}: {status}")
+        
+        return output_path
+
     def save_outputs(self, output_dir):
         """Save all outputs with proper organization."""
         if 'distribution' not in self.results:
@@ -1691,6 +1789,7 @@ class NTAAnalyzer:
         success, meta_result = save_metadata_file(self.results['metadata'], output_dir, self.config, include_headers=True)
         if success:
             created_files.append(meta_result)
+            print(f"Saved metadata file: {os.path.basename(meta_result)}")
         else:
             raise Exception(f"Failed to save metadata: {meta_result}")
         
@@ -1698,87 +1797,27 @@ class NTAAnalyzer:
         success, meta_result_excel = save_metadata_file(self.results['metadata'], output_dir, self.config, include_headers=False)
         if success:
             created_files.append(meta_result_excel)
-        
+            print(f"Saved metadata file (Excel): {os.path.basename(meta_result_excel)}")
         
         # ===== Save Distribution Data (Split by Scale) =====
+        print("\n" + "="*80)
+        print("SAVING PSD (PARTICLE SIZE DISTRIBUTION) FILES")
+        print("="*80)
+        
         dist = self.results['distribution']
         
-        # Define columns needed for D-value calculation (comprehensive, in order)
-        # CRITICAL: Must include number_normalized columns for D-value calculation
-        essential_columns = [
-            'size_nm',
-            # Basic count data
-            'number_avg', 'number_sd',
-            # Metadata columns
-            'num_replicates', 'source_files',
-            # Dilution-corrected particle concentration
-            'particles_per_mL_avg', 'particles_per_mL_sd',
-            # Dilution-corrected volume
-            'volume_nm^3_per_mL_avg', 'volume_nm^3_per_mL_sd',
-            # Dilution-corrected surface area
-            'area_nm^2_per_mL_avg', 'area_nm^2_per_mL_sd',
-            # CRITICAL: Normalized number distribution (for D-value calculation)
-            'number_normalized_avg', 'number_normalized_sd',
-            # CRITICAL: Cumulative distributions with uncertainties (for D-value calculation)
-            'number_normalized_cumsum_avg', 'number_normalized_cumsum_sd',
-            'volume_nm^3_per_mL_cumsum_avg', 'volume_nm^3_per_mL_cumsum_sd',
-            'area_nm^2_per_mL_cumsum_avg', 'area_nm^2_per_mL_cumsum_sd'
-        ]
-        
-        # Linear scale
-        linear_data = dist[dist['scale'] == 'linear'].copy()
-        if not linear_data.empty:
-            linear_path = os.path.join(output_dir, f'Data_{unique_id}_PSD_LINEAR.txt')
-            
-            # Select only essential columns (preserving order, skipping if not present)
-            cols_to_save = [col for col in essential_columns if col in linear_data.columns]
-            
-            # CRITICAL CHECK: Verify normalized columns are present
-            missing_normalized = [col for col in ['number_normalized_avg', 'number_normalized_sd', 
-                                                   'number_normalized_cumsum_avg', 'number_normalized_cumsum_sd']
-                                 if col not in cols_to_save]
-            
-            if missing_normalized:
-                print(f"\n⚠️  WARNING - Missing columns in LINEAR PSD export: {missing_normalized}")
-                print(f"   These are required for number-weighted D-value calculation!")
-                print(f"   Available columns: {sorted(linear_data.columns)}")
-            
-            print(f"\nDEBUG - Saving LINEAR PSD:")
-            print(f"  Total columns available: {len(linear_data.columns)}")
-            print(f"  Columns to save: {len(cols_to_save)}")
-            print(f"  Normalized cols in save list: {[col for col in cols_to_save if 'normalized' in col.lower()]}")
-            
-            linear_data_export = linear_data[cols_to_save]
-            linear_data_export.to_csv(linear_path, sep='\t', index=False)
-            
+        # Save linear scale
+        linear_path = self.save_psd_file(dist, 'linear', output_dir, unique_id)
+        if linear_path:
             created_files.append(linear_path)
         
-        # Logarithmic scale
-        log_data = dist[dist['scale'] == 'logarithmic'].copy()
-        if not log_data.empty:
-            log_path = os.path.join(output_dir, f'Data_{unique_id}_PSD_LOGARITHMIC.txt')
-            
-            # Select only essential columns (preserving order, skipping if not present)
-            cols_to_save = [col for col in essential_columns if col in log_data.columns]
-            
-            # CRITICAL CHECK: Verify normalized columns are present
-            missing_normalized = [col for col in ['number_normalized_avg', 'number_normalized_sd',
-                                                   'number_normalized_cumsum_avg', 'number_normalized_cumsum_sd']
-                                 if col not in cols_to_save]
-            
-            if missing_normalized:
-                print(f"\n⚠️  WARNING - Missing columns in LOGARITHMIC PSD export: {missing_normalized}")
-                print(f"   These are required for number-weighted D-value calculation!")
-                print(f"   Available columns: {sorted(log_data.columns)}")
-            
-            print(f"\nDEBUG - Saving LOGARITHMIC PSD:")
-            print(f"  Total columns available: {len(log_data.columns)}")
-            print(f"  Columns to save: {len(cols_to_save)}")
-            print(f"  Normalized cols in save list: {[col for col in cols_to_save if 'normalized' in col.lower()]}")
-            
-            log_data_export = log_data[cols_to_save]
-            log_data_export.to_csv(log_path, sep='\t', index=False)
-            
+        # Save logarithmic scale
+        log_path = self.save_psd_file(dist, 'logarithmic', output_dir, unique_id)
+        if log_path:
             created_files.append(log_path)
+        
+        print("\n" + "="*80)
+        print(f"SAVED {len(created_files)} FILES TOTAL")
+        print("="*80)
         
         return created_files

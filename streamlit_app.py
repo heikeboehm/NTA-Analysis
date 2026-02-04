@@ -15,12 +15,12 @@ from nta_analyzer_cells_01_04 import NTAAnalyzer, CONFIG
 # Set page config
 st.set_page_config(
     page_title="NTA Analysis",
-    page_icon="ðŸ§ª",
+    page_icon="beaker",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-st.title("ðŸ§ª NTA Particle Size Analysis")
+st.title("NTA Particle Size Analysis")
 st.markdown("---")
 
 # Initialize session state
@@ -31,7 +31,7 @@ if 'results' not in st.session_state:
 
 # Sidebar configuration
 with st.sidebar:
-    st.header("âš™ï¸ Configuration")
+    st.header("Configuration")
     
     st.subheader("Project Information")
     experimenter = st.text_input(
@@ -69,7 +69,7 @@ with st.sidebar:
         placeholder="Leave empty for auto-generation"
     )
     if manual_persistent_id:
-        st.info(f"â„¹ï¸ Will use: {manual_persistent_id}")
+        st.info(f"Will use: {manual_persistent_id}")
     
     # Update CONFIG with user values
     CONFIG["project_metadata"]["experimenter"] = experimenter
@@ -82,15 +82,15 @@ with st.sidebar:
     if manual_persistent_id:
         CONFIG["manual_persistent_id"] = manual_persistent_id
     
-    st.info("â„¹ï¸ Configuration changes apply when you click 'Analyze Files'")
+    st.info("Configuration changes apply when you click 'Analyze Files'")
     
     # Reset button
-    if st.button("ðŸ”„ Reset All"):
+    if st.button("Reset All"):
         st.session_state.clear()
         st.rerun()
 
 # Main content
-st.header("ðŸ“¤ Upload NTA Files")
+st.header("Upload NTA Files")
 st.markdown("Upload one or more NTA data files (.txt format)")
 
 uploaded_files = st.file_uploader(
@@ -101,7 +101,7 @@ uploaded_files = st.file_uploader(
 )
 
 if uploaded_files:
-    if st.button("ðŸ” Analyze Files", key="analyze_btn", type="primary"):
+    if st.button("Analyze Files", key="analyze_btn", type="primary"):
         with st.spinner("Processing files..."):
             try:
                 # Create temp directory
@@ -122,10 +122,10 @@ if uploaded_files:
                     st.session_state.analyzer = analyzer
                     st.session_state.results = results
                 
-                st.success("âœ… Analysis completed!")
+                st.success("Analysis completed!")
                 
             except Exception as e:
-                st.error(f"âŒ Error during analysis: {str(e)}")
+                st.error(f"Error during analysis: {str(e)}")
                 st.stop()
 
 # Display results if analysis was successful
@@ -133,16 +133,16 @@ if st.session_state.results:
     results = st.session_state.results
     
     st.markdown("---")
-    st.header("ðŸ“Š Analysis Results")
+    st.header("Analysis Results")
     
     # Tabs for different views
     tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "ðŸŽ¯ Overview",
-        "ðŸ“ˆ Distribution Data",
-        "ðŸ” Metadata",
-        "âš ï¸ Warnings",
-        "ðŸ“Š Metrics",
-        "ðŸ’¾ Download"
+        "Overview",
+        "Distribution Data",
+        "Metadata",
+        "Warnings",
+        "Metrics",
+        "Download"
     ])
     
     # TAB 0: Overview (Key Metrics)
@@ -195,7 +195,7 @@ if st.session_state.results:
     
     # TAB 1: Distribution Data
     with tab1:
-        st.subheader("Distribution Data")
+        st.subheader("Distribution Data (PSD)")
         
         # Show metrics
         col1, col2, col3 = st.columns(3)
@@ -209,12 +209,131 @@ if st.session_state.results:
             elif results['high_variation_fields']:
                 st.metric("Status", "High variation")
             else:
-                st.metric("Status", "âœ“ Good")
+                st.metric("Status", "Good")
         
-        # Show first 9 rows of linear data
-        st.subheader("Data Preview (Linear)")
-        linear_data = results['distribution'][results['distribution']['scale'] == 'linear']
-        st.dataframe(linear_data.head(9), use_container_width=True)
+        # Get distribution data
+        dist = results['distribution']
+        linear_data = dist[dist['scale'] == 'linear'].copy()
+        log_data = dist[dist['scale'] == 'logarithmic'].copy()
+        
+        # Create tabs for linear and logarithmic
+        tab_linear, tab_log = st.tabs(["Linear Scale", "Logarithmic Scale"])
+        
+        with tab_linear:
+            st.write(f"Linear scale: {len(linear_data)} size bins")
+            
+            # Column information
+            with st.expander("Column Information (Linear Scale)"):
+                st.write(f"Total columns: {len(linear_data.columns)}")
+                col_groups = {
+                    'Size': ['size_nm'],
+                    'Raw Counts': ['number_avg', 'number_sd'],
+                    'Metadata': ['num_replicates', 'source_files'],
+                    'Concentration (dilution-corrected)': ['particles_per_mL_avg', 'particles_per_mL_sd'],
+                    'Volume (dilution-corrected)': ['volume_nm^3_per_mL_avg', 'volume_nm^3_per_mL_sd'],
+                    'Surface Area (dilution-corrected)': ['area_nm^2_per_mL_avg', 'area_nm^2_per_mL_sd'],
+                    'Normalized Number [CRITICAL]': ['number_normalized_avg', 'number_normalized_sd'],
+                    'Cumulative Normalized [CRITICAL]': ['number_normalized_cumsum_avg', 'number_normalized_cumsum_sd'],
+                    'Cumulative Volume': ['volume_nm^3_per_mL_cumsum_avg', 'volume_nm^3_per_mL_cumsum_sd'],
+                    'Cumulative Surface Area': ['area_nm^2_per_mL_cumsum_avg', 'area_nm^2_per_mL_cumsum_sd']
+                }
+                
+                for group_name, cols in col_groups.items():
+                    available = [c for c in cols if c in linear_data.columns]
+                    missing = [c for c in cols if c not in linear_data.columns]
+                    
+                    status = "OK" if not missing else "MISSING"
+                    st.write(f"**{group_name}** [{status}]")
+                    for col in available:
+                        st.write(f"  - {col}")
+                    if missing:
+                        st.warning(f"  Missing: {missing}")
+            
+            # Column selector
+            st.write("Select columns to display:")
+            all_cols = list(linear_data.columns)
+            
+            # Pre-select important columns
+            important_cols = ['size_nm', 'number_normalized_avg', 'number_normalized_cumsum_avg', 
+                            'volume_nm^3_per_mL_avg', 'volume_nm^3_per_mL_cumsum_avg',
+                            'area_nm^2_per_mL_avg', 'area_nm^2_per_mL_cumsum_avg']
+            
+            selected_cols = st.multiselect(
+                "Columns",
+                all_cols,
+                default=[c for c in important_cols if c in all_cols],
+                key="linear_cols"
+            )
+            
+            if selected_cols:
+                st.dataframe(linear_data[selected_cols].head(20), use_container_width=True)
+                
+                # Download button for this view
+                csv = linear_data[selected_cols].to_csv(index=False, sep='\t')
+                st.download_button(
+                    label="Download Linear PSD (TSV)",
+                    data=csv,
+                    file_name=f"{results['metadata'].get('persistentID', 'data')}_PSD_LINEAR_preview.txt",
+                    mime="text/plain"
+                )
+        
+        with tab_log:
+            st.write(f"Logarithmic scale: {len(log_data)} size bins")
+            
+            # Column information
+            with st.expander("Column Information (Logarithmic Scale)"):
+                st.write(f"Total columns: {len(log_data.columns)}")
+                col_groups = {
+                    'Size': ['size_nm'],
+                    'Raw Counts': ['number_avg', 'number_sd'],
+                    'Metadata': ['num_replicates', 'source_files'],
+                    'Concentration (dilution-corrected)': ['particles_per_mL_avg', 'particles_per_mL_sd'],
+                    'Volume (dilution-corrected)': ['volume_nm^3_per_mL_avg', 'volume_nm^3_per_mL_sd'],
+                    'Surface Area (dilution-corrected)': ['area_nm^2_per_mL_avg', 'area_nm^2_per_mL_sd'],
+                    'Normalized Number [CRITICAL]': ['number_normalized_avg', 'number_normalized_sd'],
+                    'Cumulative Normalized [CRITICAL]': ['number_normalized_cumsum_avg', 'number_normalized_cumsum_sd'],
+                    'Cumulative Volume': ['volume_nm^3_per_mL_cumsum_avg', 'volume_nm^3_per_mL_cumsum_sd'],
+                    'Cumulative Surface Area': ['area_nm^2_per_mL_cumsum_avg', 'area_nm^2_per_mL_cumsum_sd']
+                }
+                
+                for group_name, cols in col_groups.items():
+                    available = [c for c in cols if c in log_data.columns]
+                    missing = [c for c in cols if c not in log_data.columns]
+                    
+                    status = "OK" if not missing else "MISSING"
+                    st.write(f"**{group_name}** [{status}]")
+                    for col in available:
+                        st.write(f"  - {col}")
+                    if missing:
+                        st.warning(f"  Missing: {missing}")
+            
+            # Column selector
+            st.write("Select columns to display:")
+            all_cols = list(log_data.columns)
+            
+            # Pre-select important columns
+            important_cols = ['size_nm', 'number_normalized_avg', 'number_normalized_cumsum_avg', 
+                            'volume_nm^3_per_mL_avg', 'volume_nm^3_per_mL_cumsum_avg',
+                            'area_nm^2_per_mL_avg', 'area_nm^2_per_mL_cumsum_avg']
+            
+            selected_cols = st.multiselect(
+                "Columns",
+                all_cols,
+                default=[c for c in important_cols if c in all_cols],
+                key="log_cols"
+            )
+            
+            if selected_cols:
+                st.dataframe(log_data[selected_cols].head(20), use_container_width=True)
+                
+                # Download button for this view
+                csv = log_data[selected_cols].to_csv(index=False, sep='\t')
+                st.download_button(
+                    label="Download Logarithmic PSD (TSV)",
+                    data=csv,
+                    file_name=f"{results['metadata'].get('persistentID', 'data')}_PSD_LOGARITHMIC_preview.txt",
+                    mime="text/plain"
+                )
     
     # TAB 2: Metadata
     with tab2:
@@ -248,7 +367,26 @@ if st.session_state.results:
                 'nta_particle_drift_check_result', 'nta_cell_check_result'
             ],
             'FILE REFERENCES': [
-                'meta_version', 'python_analysis'
+                'nta_processed_file', 'source_files', 'meta_version'
+            ],
+            'CALCULATIONS': [
+                'nta_python_analysis', 'nta_metrics_scale',
+                'nta_specific_surface_area_m^2_per_cm^3',
+                'nta_total_particles_per_mL',
+                'nta_total_volume_uL_per_mL',
+                'nta_volume_percentage',
+                'nta_linear_number_d10',
+                'nta_linear_number_d50',
+                'nta_linear_number_d90',
+                'nta_linear_number_span',
+                'nta_linear_volume_d10',
+                'nta_linear_volume_d50',
+                'nta_linear_volume_d90',
+                'nta_linear_volume_span',
+                'nta_linear_surface_area_d10',
+                'nta_linear_surface_area_d50',
+                'nta_linear_surface_area_d90',
+                'nta_linear_surface_area_span'
             ]
         }
         
@@ -270,7 +408,7 @@ if st.session_state.results:
         
         if not has_alerts and not has_variation:
             # All good!
-            st.success("âœ… No quality issues detected!")
+            st.success("No quality issues detected!")
             st.write("""
             Your measurement looks good:
             - No quality control alerts
@@ -278,18 +416,18 @@ if st.session_state.results:
             - All data consistent across replicates
             """)
         else:
-            st.subheader("âš ï¸ Concerning Items")
+            st.subheader("Concerning Items")
             
             # Quality control alerts
             if results['quality_alerts']:
-                st.error("ðŸš¨ **Quality Control Alerts**")
+                st.error("Quality Control Alerts")
                 for alert in results['quality_alerts']:
                     st.write(f"- {alert}")
                 st.write("**Recommendation:** Review measurement conditions and consider if data is suitable for publication.")
             
             # High variation fields
             if results['high_variation_fields']:
-                st.warning("ðŸ“Š **High Variation Between Replicates**")
+                st.warning("High Variation Between Replicates")
                 for field in results['high_variation_fields']:
                     st.write(f"- {field}")
                 st.write("**Recommendation:** Check sample consistency, mixing, and instrument stability.")
@@ -301,7 +439,7 @@ if st.session_state.results:
         # Add description of span
         st.info(
             "**Span** measures particle size distribution width: "
-            "Span = (D90 âˆ’ D10) / D50. "
+            "Span = (D90 - D10) / D50. "
             "Lower span = narrower distribution (more uniform), "
             "Higher span = broader distribution (more polydisperse)."
         )
@@ -322,7 +460,7 @@ if st.session_state.results:
                     sd = scale_metrics.get('total_particles_per_mL_sd', 0)
                     metrics_rows.append({
                         'Field': f'nta_total_particles_per_mL',
-                        'Value': f'{avg:.2E} Â± {sd:.2E}'
+                        'Value': f'{avg:.2E} +/- {sd:.2E}'
                     })
                 
                 # Total volume per mL (in uL)
@@ -331,7 +469,7 @@ if st.session_state.results:
                     sd = scale_metrics.get('total_volume_uL_per_mL_sd', 0)
                     metrics_rows.append({
                         'Field': f'nta_total_volume_uL_per_mL',
-                        'Value': f'{avg:.4E} Â± {sd:.4E}'
+                        'Value': f'{avg:.4E} +/- {sd:.4E}'
                     })
                 
                 # Volume percentage
@@ -340,7 +478,7 @@ if st.session_state.results:
                     sd = scale_metrics.get('volume_percentage_sd', 0)
                     metrics_rows.append({
                         'Field': f'nta_volume_percentage',
-                        'Value': f'{avg:.6E} Â± {sd:.6E}'
+                        'Value': f'{avg:.6E} +/- {sd:.6E}'
                     })
                 
                 # Specific surface area
@@ -406,7 +544,7 @@ if st.session_state.results:
                 
                 # Show warning if any distribution types are missing
                 if missing_types:
-                    st.warning(f"⚠️ Missing D-values for: {', '.join(missing_types)}")
+                    st.warning(f"Missing D-values for: {', '.join(missing_types)}")
                     st.info("This may occur if required cumulative distribution columns are missing. Check the downloaded PSD file.")
             
             if metrics_rows:
@@ -431,7 +569,7 @@ if st.session_state.results:
                     file_content = f.read()
                 
                 st.download_button(
-                    label=f"ðŸ“¥ {filename}",
+                    label=f"Download {filename}",
                     data=file_content,
                     file_name=filename,
                     mime="text/plain"
@@ -454,7 +592,7 @@ if st.session_state.results:
             sample_id = results['metadata'].get('persistentID', 'analysis')
             
             st.download_button(
-                label="ðŸ“¦ Download All (ZIP)",
+                label="Download All (ZIP)",
                 data=zip_buffer.getvalue(),
                 file_name=f"{sample_id}_all.zip",
                 mime="application/zip"
@@ -466,4 +604,4 @@ else:
     st.info("Upload NTA files and click 'Analyze Files'")
 
 st.markdown("---")
-st.markdown("**NTA Analysis** | Cells 01-04")
+st.markdown("**NTA Analysis** | Cells 01-06 Implementation")
