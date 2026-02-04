@@ -884,7 +884,15 @@ def save_metadata_file(metadata, output_dir=None, config=None, include_headers=T
                     'nta_linear_number_d10',
                     'nta_linear_number_d50',
                     'nta_linear_number_d90',
-                    'nta_linear_number_span'
+                    'nta_linear_number_span',
+                    'nta_linear_volume_d10',
+                    'nta_linear_volume_d50',
+                    'nta_linear_volume_d90',
+                    'nta_linear_volume_span',
+                    'nta_linear_surface_area_d10',
+                    'nta_linear_surface_area_d50',
+                    'nta_linear_surface_area_d90',
+                    'nta_linear_surface_area_span'
                 ],
                 'QUALITY ALERTS': [
                     'quality_control_alerts', 'high_variation_fields'
@@ -1384,7 +1392,7 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
 
 def add_key_statistics_to_metadata(metadata, stats):
     """
-    Add key D-values (linear number-weighted D10, D50, D90) to metadata.
+    Add key D-values and span for all distributions to metadata.
     
     Parameters:
     metadata (dict): Current metadata dictionary
@@ -1396,32 +1404,41 @@ def add_key_statistics_to_metadata(metadata, stats):
     # Create a copy to avoid modifying the original
     updated_metadata = metadata.copy()
     
-    # Get linear number-weighted statistics
-    if ('linear' in stats and 
-        'number' in stats['linear'] and 
-        stats['linear']['number']):
+    # Get linear statistics
+    if 'linear' in stats:
+        linear_stats = stats['linear']
         
-        linear_number_stats = stats['linear']['number']
+        # Define distribution types
+        dist_types = [
+            ('number', 'linear_number'),
+            ('volume', 'linear_volume'),
+            ('surface_area', 'linear_surface_area')
+        ]
         
-        # Add D-values with bounds to metadata
-        for param in ['D10', 'D50', 'D90']:
-            avg_val = linear_number_stats.get(f'{param}_avg', np.nan)
-            lower_val = linear_number_stats.get(f'{param}_lower', np.nan)
-            upper_val = linear_number_stats.get(f'{param}_upper', np.nan)
-            
-            if not np.isnan(avg_val):
-                updated_metadata[f'nta_linear_number_{param.lower()}'] = f"{avg_val:.2f} nm ({lower_val:.2f} - {upper_val:.2f})"
-            else:
-                updated_metadata[f'nta_linear_number_{param.lower()}'] = "Not available"
-        
-        # Add span with bounds
-        span_avg = linear_number_stats.get('span_avg', np.nan)
-        span_lower = linear_number_stats.get('span_lower', np.nan)
-        span_upper = linear_number_stats.get('span_upper', np.nan)
-        if not np.isnan(span_avg):
-            updated_metadata['nta_linear_number_span'] = f"{span_avg:.3f} ({span_lower:.3f} - {span_upper:.3f})"
-        else:
-            updated_metadata['nta_linear_number_span'] = "Not available"
+        # Add D-values and span for each distribution type
+        for dist_key, field_prefix in dist_types:
+            if dist_key in linear_stats:
+                dist_stats = linear_stats[dist_key]
+                
+                # Add D10, D50, D90
+                for param in ['D10', 'D50', 'D90']:
+                    avg_val = dist_stats.get(f'{param}_avg', np.nan)
+                    lower_val = dist_stats.get(f'{param}_lower', np.nan)
+                    upper_val = dist_stats.get(f'{param}_upper', np.nan)
+                    
+                    if not np.isnan(avg_val):
+                        updated_metadata[f'nta_{field_prefix}_{param.lower()}'] = f"{avg_val:.2f} nm ({lower_val:.2f} - {upper_val:.2f})"
+                    else:
+                        updated_metadata[f'nta_{field_prefix}_{param.lower()}'] = "Not available"
+                
+                # Add span with bounds
+                span_avg = dist_stats.get('span_avg', np.nan)
+                span_lower = dist_stats.get('span_lower', np.nan)
+                span_upper = dist_stats.get('span_upper', np.nan)
+                if not np.isnan(span_avg):
+                    updated_metadata[f'nta_{field_prefix}_span'] = f"{span_avg:.3f} ({span_lower:.3f} - {span_upper:.3f})"
+                else:
+                    updated_metadata[f'nta_{field_prefix}_span'] = "Not available"
     
     return updated_metadata
 

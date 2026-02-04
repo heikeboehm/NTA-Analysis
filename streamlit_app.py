@@ -1,11 +1,12 @@
 """
 NTA Data Analysis - Streamlit Web Application
-Updated to use combined analyzer with Cells 01-04
-Includes metadata discrepancy detection and warnings
+Updated to use combined analyzer with Cells 01-06
+Includes metadata discrepancy detection, warnings, metrics, and statistics
 """
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 import io
 import tempfile
 import os
@@ -135,13 +136,62 @@ if st.session_state.results:
     st.header("📊 Analysis Results")
     
     # Tabs for different views
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "🎯 Overview",
         "📈 Distribution Data",
         "🔍 Metadata",
         "⚠️ Warnings",
         "📊 Metrics",
         "💾 Download"
     ])
+    
+    # TAB 0: Overview (Key Metrics)
+    with tab0:
+        st.subheader("Analysis Overview")
+        
+        # Key metrics in columns
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            particles = results['metadata'].get('nta_total_particles_per_mL', 'N/A')
+            st.metric("Total Particles/mL", particles)
+        
+        with col2:
+            volume = results['metadata'].get('nta_total_volume_uL_per_mL', 'N/A')
+            st.metric("Total Volume (uL/mL)", volume)
+        
+        with col3:
+            ssa = results['metadata'].get('nta_specific_surface_area_m^2_per_cm^3', 'N/A')
+            st.metric("Specific Surface Area", ssa)
+        
+        # D50 and Span - most important size metrics
+        st.subheader("Size Distribution")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            d50 = results['metadata'].get('nta_linear_number_d50', 'N/A')
+            st.info(f"**D50 (Number-weighted):** {d50}")
+        
+        with col2:
+            span = results['metadata'].get('nta_linear_number_span', 'N/A')
+            st.info(f"**Span (Distribution width):** {span}")
+        
+        # Additional info
+        st.subheader("Analysis Information")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Files Analyzed", results['num_replicates'])
+        
+        with col2:
+            date = results['metadata'].get('nta_python_analysis', 'N/A')
+            st.metric("Analysis Date", date)
+        
+        with col3:
+            scale = results['metadata'].get('nta_metrics_scale', 'N/A')
+            st.metric("Scale", scale)
     
     # TAB 1: Distribution Data
     with tab1:
@@ -244,9 +294,17 @@ if st.session_state.results:
                     st.write(f"- {field}")
                 st.write("**Recommendation:** Check sample consistency, mixing, and instrument stability.")
     
-    # TAB 4: Metrics (Cell 05 Results)
+    # TAB 4: Metrics (Cell 05 & 06 Results)
     with tab4:
         st.subheader("Metrics")
+        
+        # Add description of span
+        st.info(
+            "**Span** measures particle size distribution width: "
+            "Span = (D90 − D10) / D50. "
+            "Lower span = narrower distribution (more uniform), "
+            "Higher span = broader distribution (more polydisperse)."
+        )
         
         if 'total_metrics' in results and results['total_metrics']:
             metrics_dict = results['total_metrics']
@@ -292,26 +350,56 @@ if st.session_state.results:
                         'Field': f'nta_specific_surface_area_m^2_per_cm^3',
                         'Value': f'{avg:.2f}'
                     })
-            # Add metrics_scale (replicates already in metadata)
+            
+            # Add metrics_scale
             metrics_rows.append({
                 'Field': 'nta_metrics_scale',
                 'Value': 'linear'
             })
             
-            # Add D-values if available
-            d_value_fields = [
-                'nta_linear_number_d10',
-                'nta_linear_number_d50',
-                'nta_linear_number_d90',
-                'nta_linear_number_span'
-            ]
-            
-            for field in d_value_fields:
-                if field in results['metadata']:
-                    metrics_rows.append({
-                        'Field': field,
-                        'Value': results['metadata'][field]
-                    })
+            # Add all D-values from percentile_stats (number, volume, surface area)
+            if 'percentile_stats' in results and 'linear' in results['percentile_stats']:
+                linear_stats = results['percentile_stats']['linear']
+                
+                # Define distribution types in order
+                dist_types = [
+                    ('number', 'Number-weighted (normalized)'),
+                    ('volume', 'Volume-weighted'),
+                    ('surface_area', 'Surface area-weighted')
+                ]
+                
+                for dist_key, dist_label in dist_types:
+                    if dist_key in linear_stats:
+                        stats = linear_stats[dist_key]
+                        
+                        # Add distribution header
+                        metrics_rows.append({
+                            'Field': f'--- {dist_label} ---',
+                            'Value': ''
+                        })
+                        
+                        # Add D10, D50, D90, Span
+                        for param in ['D10', 'D50', 'D90']:
+                            avg_val = stats.get(f'{param}_avg')
+                            lower_val = stats.get(f'{param}_lower')
+                            upper_val = stats.get(f'{param}_upper')
+                            
+                            if avg_val is not None and not np.isnan(avg_val):
+                                metrics_rows.append({
+                                    'Field': f'{dist_key}_{param.lower()}',
+                                    'Value': f'{avg_val:.2f} nm ({lower_val:.2f} - {upper_val:.2f})'
+                                })
+                        
+                        # Add span
+                        span_avg = stats.get('span_avg')
+                        span_lower = stats.get('span_lower')
+                        span_upper = stats.get('span_upper')
+                        
+                        if span_avg is not None and not np.isnan(span_avg):
+                            metrics_rows.append({
+                                'Field': f'{dist_key}_span',
+                                'Value': f'{span_avg:.3f} ({span_lower:.3f} - {span_upper:.3f})'
+                            })
             
             if metrics_rows:
                 metrics_df = pd.DataFrame(metrics_rows)
