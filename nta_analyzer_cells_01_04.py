@@ -1,13 +1,14 @@
 """
-NTA Data Analysis - Complete Integrated Script (Cells 01-04)
+NTA Data Analysis - Complete Integrated Script (Cells 01-05)
 
 This script combines all functions from your original notebook:
 - Cell 01: Configuration & utilities
 - Cell 02: File I/O (read, identify sections, validate)
 - Cell 03: Data extraction & averaging
 - Cell 04: Metadata extraction & analysis
+- Cell 05: Dilution correction, normalization, cumulative distributions, total metrics
 
-All code is your EXACT notebook code, adapted for Streamlit.
+All code is extracted from your EXACT notebook, adapted for Streamlit.
 """
 
 import os
@@ -18,6 +19,7 @@ from datetime import date
 
 import pandas as pd
 import numpy as np
+from scipy import integrate
 
 
 # ============================================================================
@@ -912,6 +914,214 @@ def save_metadata_file(metadata, output_dir=None, config=None, include_headers=T
 
 
 # ============================================================================
+# CELL 05: DILUTION CORRECTION & NORMALIZATION WITH UNCERTAINTY PROPAGATION
+# ============================================================================
+
+def apply_dilution_correction_with_uncertainty(df, metadata=None, manual_dilution=None):
+    """
+    Apply dilution correction to all measured values with uncertainty propagation.
+    For a dilution factor D: actual sample concentration = measured × D
+    Uncertainty propagation: σ_actual = σ_measured × D
+    """
+    updated_df = df.copy()
+    
+    dilution_factor = 1.0
+    dilution_source = "default (no dilution)"
+    
+    if manual_dilution is not None:
+        try:
+            dilution_factor = float(manual_dilution)
+            dilution_source = "manually specified"
+        except (ValueError, TypeError):
+            return False, f"Invalid manual dilution factor: {manual_dilution}"
+    elif metadata is not None and 'nta_dilution' in metadata:
+        try:
+            dilution_string = metadata['nta_dilution']
+            dilution_factor = float(dilution_string.split('±')[0].strip()) if '±' in dilution_string else float(dilution_string)
+            dilution_source = "metadata (nta_dilution)"
+        except (ValueError, TypeError):
+            print("Warning: Could not parse dilution factor from metadata, using default (1.0)")
+    
+    print(f"Applying dilution correction: factor = {dilution_factor} (source: {dilution_source})")
+    
+    # Apply dilution correction to concentration
+    if 'concentration_cm-3_avg' in updated_df.columns:
+        updated_df['particles_per_mL_avg'] = updated_df['concentration_cm-3_avg'] * dilution_factor
+        if 'concentration_cm-3_sd' in updated_df.columns:
+            updated_df['particles_per_mL_sd'] = updated_df['concentration_cm-3_sd'] * dilution_factor
+        updated_df = updated_df.drop(['concentration_cm-3_avg', 'concentration_cm-3_sd'], axis=1, errors='ignore')
+    else:
+        return False, "Missing concentration_cm-3_avg column for dilution correction"
+    
+    # Apply dilution correction to volume
+    if 'volume_nm^3_avg' in updated_df.columns:
+        updated_df['volume_nm^3_per_mL_avg'] = updated_df['volume_nm^3_avg'] * dilution_factor
+        if 'volume_nm^3_sd' in updated_df.columns:
+            updated_df['volume_nm^3_per_mL_sd'] = updated_df['volume_nm^3_sd'] * dilution_factor
+        updated_df = updated_df.drop(['volume_nm^3_avg', 'volume_nm^3_sd'], axis=1, errors='ignore')
+    
+    # Apply dilution correction to area
+    if 'area_nm^2_avg' in updated_df.columns:
+        updated_df['area_nm^2_per_mL_avg'] = updated_df['area_nm^2_avg'] * dilution_factor
+        if 'area_nm^2_sd' in updated_df.columns:
+            updated_df['area_nm^2_per_mL_sd'] = updated_df['area_nm^2_sd'] * dilution_factor
+        updated_df = updated_df.drop(['area_nm^2_avg', 'area_nm^2_sd'], axis=1, errors='ignore')
+    
+    return True, updated_df
+
+
+def normalize_distributions_with_uncertainty(df, size_column='size_nm'):
+    """
+    Normalize particle distributions by area under the curve with uncertainty propagation.
+    Creates normalized number distributions from the averaged number data.
+    """
+    normalized_df = df.copy()
+    
+    for scale in normalized_df['scale'].unique():
+        scale_mask = normalized_df['scale'] == scale
+        scale_data = normalized_df[scale_mask].copy()
+        
+        if scale_data.empty or 'number_avg' not in scale_data.columns:
+            continue
+        
+        scale_data = scale_data.sort_values(size_column)
+        sizes = scale_data[size_column].values
+        numbers_avg = scale_data['number_avg'].values
+        
+        if len(sizes) < 2:
+            continue
+        
+        area_avg = np.trapz(numbers_avg, sizes)
+        
+        if area_avg > 0:
+            normalized_df.loc[scale_mask, 'number_normalized_avg'] = numbers_avg / area_avg
+            
+            if 'number_sd' in scale_data.columns:
+                numbers_sd = scale_data['number_sd'].values
+                normalized_df.loc[scale_mask, 'number_normalized_sd'] = numbers_sd / area_avg
+            else:
+                normalized_df.loc[scale_mask, 'number_normalized_sd'] = 0.0
+        else:
+            normalized_df.loc[scale_mask, 'number_normalized_avg'] = 0.0
+            normalized_df.loc[scale_mask, 'number_normalized_sd'] = 0.0
+    
+    return normalized_df
+
+
+def calculate_cumulative_distributions_with_uncertainty(df, scale_column='scale'):
+    """
+    Calculate cumulative distributions with proper uncertainty propagation.
+    For independent uncertainties: σ_cumsum[j] = √(Σ(i=0 to j) σ[i]²)
+    """
+    result_df = df.copy()
+    
+    for scale in result_df[scale_column].unique():
+        scale_mask = result_df[scale_column] == scale
+        scale_indices = result_df[scale_mask].sort_values('size_nm').index
+        
+        if len(scale_indices) == 0:
+            continue
+        
+        # Normalized number distribution
+        if 'number_normalized_avg' in result_df.columns:
+            cumsum_avg = result_df.loc[scale_indices, 'number_normalized_avg'].cumsum()
+            if cumsum_avg.iloc[-1] > 0:
+                result_df.loc[scale_indices, 'number_normalized_cumsum_avg'] = cumsum_avg / cumsum_avg.iloc[-1]
+            else:
+                result_df.loc[scale_indices, 'number_normalized_cumsum_avg'] = 0
+            
+            if 'number_normalized_sd' in result_df.columns:
+                normalized_var_cumsum = (result_df.loc[scale_indices, 'number_normalized_sd'] ** 2).cumsum()
+                cumsum_sd = np.sqrt(normalized_var_cumsum)
+                if cumsum_avg.iloc[-1] > 0:
+                    result_df.loc[scale_indices, 'number_normalized_cumsum_sd'] = cumsum_sd / cumsum_avg.iloc[-1]
+                else:
+                    result_df.loc[scale_indices, 'number_normalized_cumsum_sd'] = 0
+        
+        # Absolute volume distribution
+        if 'volume_nm^3_per_mL_avg' in result_df.columns:
+            cumsum_avg = result_df.loc[scale_indices, 'volume_nm^3_per_mL_avg'].cumsum()
+            result_df.loc[scale_indices, 'volume_nm^3_per_mL_cumsum_avg'] = cumsum_avg
+            
+            if 'volume_nm^3_per_mL_sd' in result_df.columns:
+                volume_var_cumsum = (result_df.loc[scale_indices, 'volume_nm^3_per_mL_sd'] ** 2).cumsum()
+                result_df.loc[scale_indices, 'volume_nm^3_per_mL_cumsum_sd'] = np.sqrt(volume_var_cumsum)
+        
+        # Absolute surface area distribution
+        if 'area_nm^2_per_mL_avg' in result_df.columns:
+            cumsum_avg = result_df.loc[scale_indices, 'area_nm^2_per_mL_avg'].cumsum()
+            result_df.loc[scale_indices, 'area_nm^2_per_mL_cumsum_avg'] = cumsum_avg
+            
+            if 'area_nm^2_per_mL_sd' in result_df.columns:
+                area_var_cumsum = (result_df.loc[scale_indices, 'area_nm^2_per_mL_sd'] ** 2).cumsum()
+                result_df.loc[scale_indices, 'area_nm^2_per_mL_cumsum_sd'] = np.sqrt(area_var_cumsum)
+    
+    return result_df
+
+
+def calculate_total_metrics_with_uncertainty(df, scale_column='scale'):
+    """
+    Calculate total metrics for each scale with proper uncertainty propagation.
+    For totals: σ_total = √(Σ σ_i²)
+    """
+    results = {}
+    
+    for scale in df[scale_column].unique():
+        scale_df = df[df[scale_column] == scale].sort_values('size_nm')
+        scale_metrics = {}
+        
+        if not scale_df.empty:
+            # Total particles per mL
+            if 'particles_per_mL_avg' in scale_df.columns:
+                total_particles_avg = scale_df['particles_per_mL_avg'].sum()
+                scale_metrics['total_particles_per_mL_avg'] = total_particles_avg
+                scale_metrics['total_particles_per_uL_avg'] = total_particles_avg / 1000
+                
+                if 'particles_per_mL_sd' in scale_df.columns:
+                    total_particles_sd = np.sqrt((scale_df['particles_per_mL_sd'] ** 2).sum())
+                    scale_metrics['total_particles_per_mL_sd'] = total_particles_sd
+                    scale_metrics['total_particles_per_uL_sd'] = total_particles_sd / 1000
+            
+            # Total volume per mL
+            if 'volume_nm^3_per_mL_avg' in scale_df.columns:
+                total_volume_avg = scale_df['volume_nm^3_per_mL_avg'].sum()
+                scale_metrics['total_volume_nm^3_per_mL_avg'] = total_volume_avg
+                scale_metrics['total_volume_um^3_per_mL_avg'] = total_volume_avg / 1e9
+                scale_metrics['total_volume_uL_per_mL_avg'] = total_volume_avg / 1e18
+                scale_metrics['volume_percentage_avg'] = (total_volume_avg / 1e18) * 0.1
+                
+                if 'volume_nm^3_per_mL_sd' in scale_df.columns:
+                    total_volume_sd = np.sqrt((scale_df['volume_nm^3_per_mL_sd'] ** 2).sum())
+                    scale_metrics['total_volume_nm^3_per_mL_sd'] = total_volume_sd
+                    scale_metrics['total_volume_um^3_per_mL_sd'] = total_volume_sd / 1e9
+                    scale_metrics['total_volume_uL_per_mL_sd'] = total_volume_sd / 1e18
+                    scale_metrics['volume_percentage_sd'] = (total_volume_sd / 1e18) * 0.1
+            
+            # Total surface area per mL
+            if 'area_nm^2_per_mL_avg' in scale_df.columns:
+                total_area_avg = scale_df['area_nm^2_per_mL_avg'].sum()
+                scale_metrics['total_surface_area_nm^2_per_mL_avg'] = total_area_avg
+                scale_metrics['total_surface_area_um^2_per_mL_avg'] = total_area_avg / 1e6
+                scale_metrics['total_surface_area_cm^2_per_mL_avg'] = total_area_avg / 1e14
+                
+                if 'area_nm^2_per_mL_sd' in scale_df.columns:
+                    total_area_sd = np.sqrt((scale_df['area_nm^2_per_mL_sd'] ** 2).sum())
+                    scale_metrics['total_surface_area_nm^2_per_mL_sd'] = total_area_sd
+                    scale_metrics['total_surface_area_um^2_per_mL_sd'] = total_area_sd / 1e6
+                    scale_metrics['total_surface_area_cm^2_per_mL_sd'] = total_area_sd / 1e14
+                
+                # Specific surface area (derived, no uncertainty)
+                if ('total_volume_nm^3_per_mL_avg' in scale_metrics and 
+                    scale_metrics['total_volume_nm^3_per_mL_avg'] > 0):
+                    ssa_1_per_nm = total_area_avg / scale_metrics['total_volume_nm^3_per_mL_avg']
+                    scale_metrics['specific_surface_area_m^2_per_cm^3_avg'] = ssa_1_per_nm * 10
+        
+        results[scale] = scale_metrics
+    
+    return results
+
+
+# ============================================================================
 # MAIN ANALYZER CLASS
 # ============================================================================
 
@@ -974,9 +1184,58 @@ class NTAAnalyzer:
             all_metadata, identical, different, self.config
         )
         
+        # ===== CELL 05: Dilution Correction, Normalization & Metrics =====
+        print("\n" + "="*80)
+        print("EXECUTING CELL 05: DILUTION CORRECTION & NORMALIZATION")
+        print("="*80)
+        
+        # Step 1: Dilution correction
+        print("\n1. Applying dilution correction with uncertainty propagation...")
+        success, dilution_corrected_df = apply_dilution_correction_with_uncertainty(
+            avg_dist, 
+            metadata=metadata
+        )
+        if success:
+            print("✓ Dilution correction completed")
+            avg_dist = dilution_corrected_df
+        else:
+            print(f"✗ Dilution correction failed: {dilution_corrected_df}")
+        
+        # Step 2: Normalization
+        print("\n2. Normalizing distributions with uncertainty propagation...")
+        try:
+            normalized_df = normalize_distributions_with_uncertainty(avg_dist)
+            print("✓ Normalization completed")
+            avg_dist = normalized_df
+        except Exception as e:
+            print(f"✗ Normalization failed: {e}")
+        
+        # Step 3: Cumulative distributions
+        print("\n3. Calculating cumulative distributions with uncertainty...")
+        try:
+            final_df = calculate_cumulative_distributions_with_uncertainty(avg_dist)
+            print("✓ Cumulative distributions calculated")
+            avg_dist = final_df
+        except Exception as e:
+            print(f"✗ Cumulative distribution calculation failed: {e}")
+        
+        # Step 4: Total metrics
+        print("\n4. Calculating total metrics with uncertainty...")
+        try:
+            total_metrics = calculate_total_metrics_with_uncertainty(avg_dist)
+            print("✓ Total metrics calculated")
+        except Exception as e:
+            print(f"✗ Total metrics calculation failed: {e}")
+            total_metrics = {}
+        
+        print("\n" + "="*80)
+        print("CELL 05 PROCESSING COMPLETE")
+        print("="*80 + "\n")
+        
         self.results = {
             'distribution': avg_dist,
             'metadata': metadata,
+            'total_metrics': total_metrics,
             'identical_fields': identical,
             'different_fields': different,
             'field_analysis': analysis,
