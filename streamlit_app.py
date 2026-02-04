@@ -251,10 +251,13 @@ if st.session_state.results:
         if 'total_metrics' in results and results['total_metrics']:
             metrics_dict = results['total_metrics']
             
-            # Build formatted metrics list matching original metadata style
+            # Build formatted metrics list - only LINEAR scale
             metrics_rows = []
             
-            for scale, scale_metrics in metrics_dict.items():
+            # Use LINEAR scale only (not logarithmic)
+            if 'linear' in metrics_dict:
+                scale_metrics = metrics_dict['linear']
+                
                 # Total particles per mL
                 if 'total_particles_per_mL_avg' in scale_metrics:
                     avg = scale_metrics['total_particles_per_mL_avg']
@@ -280,15 +283,6 @@ if st.session_state.results:
                     metrics_rows.append({
                         'Field': f'nta_volume_percentage',
                         'Value': f'{avg:.6E} ± {sd:.6E}'
-                    })
-                
-                # Total surface area (in cm²)
-                if 'total_surface_area_cm^2_per_mL_avg' in scale_metrics:
-                    avg = scale_metrics['total_surface_area_cm^2_per_mL_avg']
-                    sd = scale_metrics.get('total_surface_area_cm^2_per_mL_sd', 0)
-                    metrics_rows.append({
-                        'Field': f'nta_total_surface_area_cm^2_per_mL',
-                        'Value': f'{avg:.4E} ± {sd:.4E}'
                     })
                 
                 # Specific surface area

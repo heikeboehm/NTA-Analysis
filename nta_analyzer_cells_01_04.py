@@ -1124,6 +1124,7 @@ def calculate_total_metrics_with_uncertainty(df, scale_column='scale'):
 def add_metrics_to_metadata_with_uncertainty(metadata, metrics, scale='linear', num_replicates=None):
     """
     Add key metrics with uncertainties to the metadata dictionary.
+    Only adds metrics for the specified scale (default: linear).
     
     Parameters:
     metadata (dict): Current metadata dictionary
@@ -1136,7 +1137,7 @@ def add_metrics_to_metadata_with_uncertainty(metadata, metrics, scale='linear', 
     """
     updated_metadata = metadata.copy()
     
-    # Use linear scale metrics by default
+    # Use specified scale (default: linear)
     if scale not in metrics:
         if metrics:
             scale = list(metrics.keys())[0]
@@ -1161,11 +1162,6 @@ def add_metrics_to_metadata_with_uncertainty(metadata, metrics, scale='linear', 
         sd_val = scale_metrics.get('volume_percentage_sd', 0)
         # Use scientific notation for volume_percentage
         updated_metadata['nta_volume_percentage'] = f"{avg_val:.6E} ± {sd_val:.6E}"
-    
-    if 'total_surface_area_cm^2_per_mL_avg' in scale_metrics:
-        avg_val = scale_metrics['total_surface_area_cm^2_per_mL_avg']
-        sd_val = scale_metrics.get('total_surface_area_cm^2_per_mL_sd', 0)
-        updated_metadata['nta_total_surface_area_cm^2_per_mL'] = f"{avg_val:.4E} ± {sd_val:.4E}"
     
     if 'specific_surface_area_m^2_per_cm^3_avg' in scale_metrics:
         avg_val = scale_metrics['specific_surface_area_m^2_per_cm^3_avg']
