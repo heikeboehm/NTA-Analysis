@@ -1121,6 +1121,65 @@ def calculate_total_metrics_with_uncertainty(df, scale_column='scale'):
     return results
 
 
+def add_metrics_to_metadata_with_uncertainty(metadata, metrics, scale='linear', num_replicates=None):
+    """
+    Add key metrics with uncertainties to the metadata dictionary.
+    
+    Parameters:
+    metadata (dict): Current metadata dictionary
+    metrics (dict): Dictionary of calculated metrics with uncertainties
+    scale (str): Which scale's metrics to use ('linear' or 'logarithmic')
+    num_replicates (int): Number of replicates (optional)
+    
+    Returns:
+    dict: Updated metadata dictionary with added metrics
+    """
+    updated_metadata = metadata.copy()
+    
+    # Use linear scale metrics by default
+    if scale not in metrics:
+        if metrics:
+            scale = list(metrics.keys())[0]
+        else:
+            return updated_metadata
+    
+    scale_metrics = metrics[scale]
+    
+    # Add key metrics to metadata with uncertainties
+    if 'total_particles_per_mL_avg' in scale_metrics:
+        avg_val = scale_metrics['total_particles_per_mL_avg']
+        sd_val = scale_metrics.get('total_particles_per_mL_sd', 0)
+        updated_metadata['nta_total_particles_per_mL'] = f"{avg_val:.2E} ± {sd_val:.2E}"
+    
+    if 'total_volume_uL_per_mL_avg' in scale_metrics:
+        avg_val = scale_metrics['total_volume_uL_per_mL_avg']
+        sd_val = scale_metrics.get('total_volume_uL_per_mL_sd', 0)
+        updated_metadata['nta_total_volume_uL_per_mL'] = f"{avg_val:.4E} ± {sd_val:.4E}"
+    
+    if 'volume_percentage_avg' in scale_metrics:
+        avg_val = scale_metrics['volume_percentage_avg']
+        sd_val = scale_metrics.get('volume_percentage_sd', 0)
+        # Use scientific notation for volume_percentage
+        updated_metadata['nta_volume_percentage'] = f"{avg_val:.6E} ± {sd_val:.6E}"
+    
+    if 'total_surface_area_cm^2_per_mL_avg' in scale_metrics:
+        avg_val = scale_metrics['total_surface_area_cm^2_per_mL_avg']
+        sd_val = scale_metrics.get('total_surface_area_cm^2_per_mL_sd', 0)
+        updated_metadata['nta_total_surface_area_cm^2_per_mL'] = f"{avg_val:.4E} ± {sd_val:.4E}"
+    
+    if 'specific_surface_area_m^2_per_cm^3_avg' in scale_metrics:
+        avg_val = scale_metrics['specific_surface_area_m^2_per_cm^3_avg']
+        updated_metadata['nta_specific_surface_area_m^2_per_cm^3'] = f"{avg_val:.2f}"
+    
+    # Add scale and replicate info
+    updated_metadata['nta_metrics_scale'] = scale
+    
+    if num_replicates is not None:
+        updated_metadata['nta_metrics_replicates'] = str(num_replicates)
+    
+    return updated_metadata
+
+
 # ============================================================================
 # MAIN ANALYZER CLASS
 # ============================================================================
@@ -1227,6 +1286,16 @@ class NTAAnalyzer:
         except Exception as e:
             print(f"✗ Total metrics calculation failed: {e}")
             total_metrics = {}
+        
+        # Step 5: Add metrics to metadata for saving
+        print("\n5. Adding metrics to metadata...")
+        try:
+            metadata = add_metrics_to_metadata_with_uncertainty(
+                metadata, total_metrics, scale='linear', num_replicates=len(successful_files)
+            )
+            print("✓ Metrics added to metadata")
+        except Exception as e:
+            print(f"✗ Failed to add metrics to metadata: {e}")
         
         print("\n" + "="*80)
         print("CELL 05 PROCESSING COMPLETE")

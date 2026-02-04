@@ -246,31 +246,72 @@ if st.session_state.results:
     
     # TAB 4: Metrics (Cell 05 Results)
     with tab4:
-        st.subheader("Total Metrics")
+        st.subheader("Metrics")
         
         if 'total_metrics' in results and results['total_metrics']:
             metrics_dict = results['total_metrics']
             
-            # Show metrics for each scale
+            # Build formatted metrics list matching original metadata style
+            metrics_rows = []
+            
             for scale, scale_metrics in metrics_dict.items():
-                st.write(f"**{scale.upper()} Scale**")
+                # Total particles per mL
+                if 'total_particles_per_mL_avg' in scale_metrics:
+                    avg = scale_metrics['total_particles_per_mL_avg']
+                    sd = scale_metrics.get('total_particles_per_mL_sd', 0)
+                    metrics_rows.append({
+                        'Field': f'nta_total_particles_per_mL',
+                        'Value': f'{avg:.2E} ± {sd:.2E}'
+                    })
                 
-                metrics_data = []
-                for key, value in sorted(scale_metrics.items()):
-                    if isinstance(value, float):
-                        # Format scientific notation
-                        if abs(value) < 1e-5 or abs(value) > 1e5:
-                            metrics_data.append({'Metric': key, 'Value': f"{value:.3E}"})
-                        else:
-                            metrics_data.append({'Metric': key, 'Value': f"{value:.6f}"})
-                    else:
-                        metrics_data.append({'Metric': key, 'Value': str(value)})
+                # Total volume per mL (in uL)
+                if 'total_volume_uL_per_mL_avg' in scale_metrics:
+                    avg = scale_metrics['total_volume_uL_per_mL_avg']
+                    sd = scale_metrics.get('total_volume_uL_per_mL_sd', 0)
+                    metrics_rows.append({
+                        'Field': f'nta_total_volume_uL_per_mL',
+                        'Value': f'{avg:.4E} ± {sd:.4E}'
+                    })
                 
-                if metrics_data:
-                    metrics_df = pd.DataFrame(metrics_data)
-                    st.dataframe(metrics_df, use_container_width=True, hide_index=True)
+                # Volume percentage
+                if 'volume_percentage_avg' in scale_metrics:
+                    avg = scale_metrics['volume_percentage_avg']
+                    sd = scale_metrics.get('volume_percentage_sd', 0)
+                    metrics_rows.append({
+                        'Field': f'nta_volume_percentage',
+                        'Value': f'{avg:.6E} ± {sd:.6E}'
+                    })
                 
-                st.write("")  # Spacing
+                # Total surface area (in cm²)
+                if 'total_surface_area_cm^2_per_mL_avg' in scale_metrics:
+                    avg = scale_metrics['total_surface_area_cm^2_per_mL_avg']
+                    sd = scale_metrics.get('total_surface_area_cm^2_per_mL_sd', 0)
+                    metrics_rows.append({
+                        'Field': f'nta_total_surface_area_cm^2_per_mL',
+                        'Value': f'{avg:.4E} ± {sd:.4E}'
+                    })
+                
+                # Specific surface area
+                if 'specific_surface_area_m^2_per_cm^3_avg' in scale_metrics:
+                    avg = scale_metrics['specific_surface_area_m^2_per_cm^3_avg']
+                    metrics_rows.append({
+                        'Field': f'nta_specific_surface_area_m^2_per_cm^3',
+                        'Value': f'{avg:.2f}'
+                    })
+            
+            # Add metadata about metrics
+            metrics_rows.append({
+                'Field': 'nta_metrics_scale',
+                'Value': 'linear'
+            })
+            metrics_rows.append({
+                'Field': 'nta_metrics_replicates',
+                'Value': str(results['num_replicates'])
+            })
+            
+            if metrics_rows:
+                metrics_df = pd.DataFrame(metrics_rows)
+                st.dataframe(metrics_df, use_container_width=True, hide_index=True)
         else:
             st.info("No metrics calculated yet")
     
