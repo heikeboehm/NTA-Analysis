@@ -1724,6 +1724,13 @@ class NTAAnalyzer:
             
             # Select only essential columns (preserving order, skipping if not present)
             cols_to_save = [col for col in essential_columns if col in linear_data.columns]
+            
+            # DEBUG: Print what we're saving
+            print(f"\nDEBUG - Saving LINEAR PSD:")
+            print(f"  Total columns available: {len(linear_data.columns)}")
+            print(f"  Columns to save: {len(cols_to_save)}")
+            print(f"  Normalized cols in save list: {[col for col in cols_to_save if 'normalized' in col.lower()]}")
+            
             linear_data_export = linear_data[cols_to_save]
             linear_data_export.to_csv(linear_path, sep='\t', index=False)
             
@@ -1736,6 +1743,13 @@ class NTAAnalyzer:
             
             # Select only essential columns (preserving order, skipping if not present)
             cols_to_save = [col for col in essential_columns if col in log_data.columns]
+            
+            # DEBUG: Print what we're saving
+            print(f"\nDEBUG - Saving LOGARITHMIC PSD:")
+            print(f"  Total columns available: {len(log_data.columns)}")
+            print(f"  Columns to save: {len(cols_to_save)}")
+            print(f"  Normalized cols in save list: {[col for col in cols_to_save if 'normalized' in col.lower()]}")
+            
             log_data_export = log_data[cols_to_save]
             log_data_export.to_csv(log_path, sep='\t', index=False)
             
