@@ -1677,70 +1677,7 @@ class NTAAnalyzer:
         
         return self.results
     
-    def save_psd_file(self, dist, scale_name, output_dir, unique_id):
-        """
-        Save PSD (Particle Size Distribution) file with ALL available columns.
-        Always saves the file - does NOT fail if columns are missing.
-        """
-        try:
-            # Filter data for this scale
-            scale_data = dist[dist['scale'] == scale_name].copy()
-            
-            if scale_data.empty:
-                print(f"WARNING: No data for scale '{scale_name}'")
-                return None
-            
-            # Save with ALL columns available in the dataframe
-            cols_to_save = list(scale_data.columns)
-            
-            # Remove 'scale' column if present (not needed in export)
-            if 'scale' in cols_to_save:
-                cols_to_save.remove('scale')
-            
-            # Create output filename
-            scale_label = 'LINEAR' if scale_name == 'linear' else 'LOGARITHMIC'
-            output_path = os.path.join(output_dir, f'Data_{unique_id}_PSD_{scale_label}.txt')
-            
-            # Create output dataframe with all columns
-            output_df = scale_data[cols_to_save].copy()
-            
-            # Save to file
-            output_df.to_csv(output_path, sep='\t', index=False)
-            
-            # Print summary with diagnostics
-            print(f"\nSaved {scale_label} PSD file:")
-            print(f"  File: {os.path.basename(output_path)}")
-            print(f"  Rows: {len(output_df)}")
-            print(f"  Columns: {len(cols_to_save)}")
-            
-            # Check for critical columns
-            critical_cols = ['number_normalized_avg', 'number_normalized_sd', 
-                            'number_normalized_cumsum_avg', 'number_normalized_cumsum_sd']
-            present_critical = [col for col in critical_cols if col in cols_to_save]
-            missing_critical = [col for col in critical_cols if col not in cols_to_save]
-            
-            if present_critical:
-                print(f"  Critical columns present: {len(present_critical)}/4")
-                for col in present_critical:
-                    print(f"    [OK] {col}")
-            
-            if missing_critical:
-                print(f"  WARNING: Missing critical columns: {len(missing_critical)}/4")
-                for col in missing_critical:
-                    print(f"    [MISSING] {col}")
-                print(f"  Available columns in dataframe:")
-                for col in sorted(cols_to_save):
-                    print(f"    - {col}")
-            else:
-                print(f"  OK: All critical columns present")
-            
-            return output_path
-        
-        except Exception as e:
-            print(f"\nERROR saving {scale_name} PSD file: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return None
+
 
     def save_outputs(self, output_dir):
         """Save all outputs with proper organization."""
@@ -1766,22 +1703,43 @@ class NTAAnalyzer:
             created_files.append(meta_result_excel)
             print(f"Saved metadata file (Excel): {os.path.basename(meta_result_excel)}")
         
-        # ===== Save Distribution Data (Split by Scale) =====
+        # ===== Save Distribution Data (Combined - All Scales in ONE File) =====
         print("\n" + "="*80)
-        print("SAVING PSD (PARTICLE SIZE DISTRIBUTION) FILES")
+        print("SAVING PSD (PARTICLE SIZE DISTRIBUTION) FILE")
         print("="*80)
         
-        dist = self.results['distribution']
+        try:
+            dist = self.results['distribution'].copy()
+            
+            if dist.empty:
+                print("WARNING: No distribution data to save")
+            else:
+                # Save ALL data (both linear and logarithmic scales) in ONE file
+                # Keep the 'scale' column to distinguish between linear and log data
+                psd_path = os.path.join(output_dir, f'Data_{unique_id}_PSD.txt')
+                
+                # Save the entire dataframe as-is
+                dist.to_csv(psd_path, sep='\t', index=False)
+                
+                created_files.append(psd_path)
+                
+                linear_rows = len(dist[dist['scale'] == 'linear'])
+                log_rows = len(dist[dist['scale'] == 'logarithmic'])
+                
+                print(f"\nSaved PSD file: Data_{unique_id}_PSD.txt")
+                print(f"  Total rows: {len(dist)}")
+                print(f"    Linear scale: {linear_rows}")
+                print(f"    Logarithmic scale: {log_rows}")
+                print(f"  Total columns: {len(dist.columns)}")
+                print(f"  Columns saved:")
+                for i, col in enumerate(dist.columns, 1):
+                    marker = "[CRITICAL]" if 'number_normalized' in col else ""
+                    print(f"    {i:2d}. {col} {marker}")
         
-        # Save linear scale
-        linear_path = self.save_psd_file(dist, 'linear', output_dir, unique_id)
-        if linear_path:
-            created_files.append(linear_path)
-        
-        # Save logarithmic scale
-        log_path = self.save_psd_file(dist, 'logarithmic', output_dir, unique_id)
-        if log_path:
-            created_files.append(log_path)
+        except Exception as e:
+            print(f"ERROR saving PSD file: {str(e)}")
+            import traceback
+            traceback.print_exc()
         
         print("\n" + "="*80)
         print(f"SAVED {len(created_files)} FILES TOTAL")
