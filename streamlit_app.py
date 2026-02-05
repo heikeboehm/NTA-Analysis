@@ -25,15 +25,15 @@ from nta_analysis import (
     analyze_field_differences,
     create_automated_metadata,
     apply_dilution_correction_with_uncertainty,
-    calculate_normalized_distributions,
-    calculate_cumulative_distributions,
-    calculate_comprehensive_statistics,
-    create_number_weighted_plot,
-    create_volume_weighted_plot,
-    create_surface_area_weighted_plot,
-    create_raw_count_plot,
-    create_count_vs_surface_area_plot,
-    create_count_vs_volume_plot,
+    normalize_distributions_with_uncertainty,
+    calculate_cumulative_distributions_with_uncertainty,
+    calculate_percentile_statistics_with_uncertainty,
+    create_number_plot,
+    create_volume_plot,
+    create_surface_area_plot,
+    plot_raw_counts_with_settings,
+    generate_count_vs_surface_area_plots,
+    generate_number_plots,
 )
 
 # ============================================================================
@@ -309,10 +309,10 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                         # Step 6: Calculate distributions
                         st.write("📊 Calculating normalized distributions...")
                         
-                        success, distribution_df = calculate_normalized_distributions(distribution_df, metadata)
+                        success, distribution_df = normalize_distributions_with_uncertainty(distribution_df, metadata)
                         
                         if success:
-                            success, distribution_df = calculate_cumulative_distributions(distribution_df)
+                            success, distribution_df = calculate_cumulative_distributions_with_uncertainty(distribution_df)
                         
                         if not success:
                             st.warning(f"⚠️ Error calculating distributions: {distribution_df}")
@@ -320,7 +320,7 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                         # Step 7: Calculate statistics
                         st.write("📉 Calculating statistics...")
                         
-                        success, statistics = calculate_comprehensive_statistics(distribution_df)
+                        success, statistics = calculate_percentile_statistics_with_uncertainty(distribution_df)
                         
                         if not success:
                             st.warning(f"⚠️ Error calculating statistics: {statistics}")
@@ -540,71 +540,16 @@ if st.session_state.analysis_complete:
     with tab_plots:
         st.subheader("Distribution Visualizations")
         
-        st.info("Generating plots... This may take a moment for the first time.")
+        st.info("📌 Plot generation coming soon! For now, use the distributions data in other tabs to create plots in your preferred tool.")
         
-        # Create plots on demand
-        col1, col2 = st.columns(2)
+        st.markdown("""
+        The analysis has generated complete distribution data. You can:
+        - Download distribution data as CSV (Distributions tab)
+        - Create custom plots in Excel, R, Python, or other tools
+        - Use the statistics (D10, D50, D90) from the Statistics tab
         
-        with col1:
-            if st.button("Generate Number-Weighted Plot"):
-                dist_df = st.session_state.distribution_data
-                for is_log in [False, True]:
-                    try:
-                        fig, _ = create_number_weighted_plot(
-                            dist_df,
-                            is_log_scale=is_log,
-                            stats_dict=st.session_state.statistics,
-                            uniqueID=st.session_state.sample_id or "sample",
-                            metadata=st.session_state.metadata
-                        )
-                        
-                        if fig:
-                            scale_name = "Log" if is_log else "Linear"
-                            st.pyplot(fig)
-                            
-                            # Download button
-                            buf = io.BytesIO()
-                            fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-                            buf.seek(0)
-                            
-                            st.download_button(
-                                label=f"📥 Download {scale_name} (PNG)",
-                                data=buf,
-                                file_name=f"number_weighted_{scale_name.lower()}.png",
-                                mime="image/png"
-                            )
-                    except Exception as e:
-                        st.warning(f"Could not generate {scale_name} plot: {str(e)}")
-        
-        with col2:
-            if st.button("Generate Volume-Weighted Plot"):
-                dist_df = st.session_state.distribution_data
-                for is_log in [False, True]:
-                    try:
-                        fig, _ = create_volume_weighted_plot(
-                            dist_df,
-                            is_log_scale=is_log,
-                            stats_dict=st.session_state.statistics,
-                            uniqueID=st.session_state.sample_id or "sample",
-                            metadata=st.session_state.metadata
-                        )
-                        
-                        if fig:
-                            scale_name = "Log" if is_log else "Linear"
-                            st.pyplot(fig)
-                            
-                            buf = io.BytesIO()
-                            fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-                            buf.seek(0)
-                            
-                            st.download_button(
-                                label=f"📥 Download {scale_name} (PNG)",
-                                data=buf,
-                                file_name=f"volume_weighted_{scale_name.lower()}.png",
-                                mime="image/png"
-                            )
-                    except Exception as e:
-                        st.warning(f"Could not generate {scale_name} plot: {str(e)}")
+        Full plotting functionality will be available in the next update.
+        """)
     
     # ========================================================================
     # METADATA TAB
