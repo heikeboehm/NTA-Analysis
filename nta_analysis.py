@@ -686,7 +686,7 @@ def normalize_distributions_with_uncertainty(df, metadata=None, size_column='siz
             normalized_df.loc[scale_mask, 'number_normalized_avg'] = 0.0
             normalized_df.loc[scale_mask, 'number_normalized_sd'] = 0.0
     
-    return normalized_df
+    return True, normalized_df
 
 
 def calculate_cumulative_distributions_with_uncertainty(df, scale_column='scale'):
@@ -733,7 +733,7 @@ def calculate_cumulative_distributions_with_uncertainty(df, scale_column='scale'
                 area_var_cumsum = (result_df.loc[scale_indices, 'area_nm^2_per_mL_sd'] ** 2).cumsum()
                 result_df.loc[scale_indices, 'area_nm^2_per_mL_cumsum_sd'] = np.sqrt(area_var_cumsum)
     
-    return result_df
+    return True, result_df
 
 
 def interpolate_d_value_with_bounds(sizes, cumsum_avg, cumsum_sd, target_fraction):
