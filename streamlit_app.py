@@ -385,37 +385,42 @@ if st.session_state.analysis_complete:
     with tab_statistics:
         st.subheader("Statistical Summary")
         
-        if st.session_state.statistics:
+        if st.session_state.statistics and isinstance(st.session_state.statistics, dict):
             stats = st.session_state.statistics
             
             stats_list = []
             
-            for scale in ['linear', 'logarithmic']:
-                if scale in stats:
-                    for dist_type in ['number', 'volume', 'surface_area']:
-                        if dist_type in stats[scale]:
-                            stat_dict = stats[scale][dist_type]
-                            
-                            stats_list.append({
-                                'Scale': scale.capitalize(),
-                                'Distribution': dist_type.replace('_', ' ').title(),
-                                'D10': f"{stat_dict.get('D10_avg', 'N/A'):.2f}" if isinstance(stat_dict.get('D10_avg'), (int, float)) else 'N/A',
-                                'D50': f"{stat_dict.get('D50_avg', 'N/A'):.2f}" if isinstance(stat_dict.get('D50_avg'), (int, float)) else 'N/A',
-                                'D90': f"{stat_dict.get('D90_avg', 'N/A'):.2f}" if isinstance(stat_dict.get('D90_avg'), (int, float)) else 'N/A',
-                                'Span': f"{stat_dict.get('span_avg', 'N/A'):.3f}" if isinstance(stat_dict.get('span_avg'), (int, float)) else 'N/A',
-                            })
-            
-            if stats_list:
-                stats_df = pd.DataFrame(stats_list)
-                st.dataframe(stats_df, use_container_width=True)
+            try:
+                for scale in ['linear', 'logarithmic']:
+                    if scale in stats and isinstance(stats[scale], dict):
+                        for dist_type in ['number', 'volume', 'surface_area']:
+                            if dist_type in stats[scale]:
+                                stat_dict = stats[scale][dist_type]
+                                
+                                stats_list.append({
+                                    'Scale': scale.capitalize(),
+                                    'Distribution': dist_type.replace('_', ' ').title(),
+                                    'D10': f"{stat_dict.get('D10_avg', 'N/A'):.2f}" if isinstance(stat_dict.get('D10_avg'), (int, float)) else 'N/A',
+                                    'D50': f"{stat_dict.get('D50_avg', 'N/A'):.2f}" if isinstance(stat_dict.get('D50_avg'), (int, float)) else 'N/A',
+                                    'D90': f"{stat_dict.get('D90_avg', 'N/A'):.2f}" if isinstance(stat_dict.get('D90_avg'), (int, float)) else 'N/A',
+                                    'Span': f"{stat_dict.get('span_avg', 'N/A'):.3f}" if isinstance(stat_dict.get('span_avg'), (int, float)) else 'N/A',
+                                })
                 
-                stats_csv = stats_df.to_csv(index=False)
-                st.download_button(
-                    label="📥 Download Statistics",
-                    data=stats_csv,
-                    file_name="statistics.csv",
-                    mime="text/csv"
-                )
+                if stats_list:
+                    stats_df = pd.DataFrame(stats_list)
+                    st.dataframe(stats_df, use_container_width=True)
+                    
+                    stats_csv = stats_df.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Download Statistics",
+                        data=stats_csv,
+                        file_name="statistics.csv",
+                        mime="text/csv"
+                    )
+                else:
+                    st.info("No statistics data available")
+            except Exception as e:
+                st.warning(f"Error processing statistics: {str(e)}")
         else:
             st.warning("No statistics available")
     
@@ -457,29 +462,38 @@ if st.session_state.analysis_complete:
         with col2:
             st.subheader("📉 Statistics")
             
-            if st.session_state.statistics:
+            if st.session_state.statistics and isinstance(st.session_state.statistics, dict):
                 stats_list = []
                 stats = st.session_state.statistics
                 
-                for scale in stats:
-                    for dist_type in stats[scale]:
-                        stat_dict = stats[scale][dist_type]
-                        row = {
-                            'Scale': scale,
-                            'Distribution': dist_type,
-                            **stat_dict
-                        }
-                        stats_list.append(row)
-                
-                stats_df = pd.DataFrame(stats_list)
-                csv_data = stats_df.to_csv(index=False)
-                st.download_button(
-                    label="📥 Statistics (CSV)",
-                    data=csv_data,
-                    file_name="statistics.csv",
-                    mime="text/csv",
-                    key="stats_csv"
-                )
+                try:
+                    for scale in stats:
+                        if isinstance(stats[scale], dict):
+                            for dist_type in stats[scale]:
+                                stat_dict = stats[scale][dist_type]
+                                row = {
+                                    'Scale': scale,
+                                    'Distribution': dist_type,
+                                    **stat_dict
+                                }
+                                stats_list.append(row)
+                    
+                    if stats_list:
+                        stats_df = pd.DataFrame(stats_list)
+                        csv_data = stats_df.to_csv(index=False)
+                        st.download_button(
+                            label="📥 Statistics (CSV)",
+                            data=csv_data,
+                            file_name="statistics.csv",
+                            mime="text/csv",
+                            key="stats_csv"
+                        )
+                    else:
+                        st.info("No statistics data to export")
+                except Exception as e:
+                    st.warning(f"Could not format statistics for download: {str(e)}")
+            else:
+                st.info("Statistics not yet calculated")
 
 else:
     # No analysis yet
