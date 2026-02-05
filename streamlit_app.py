@@ -12,9 +12,8 @@ import matplotlib.pyplot as plt
 import io
 import os
 from datetime import datetime
-from pathlib import Path
 
-# Import the NTA analysis module
+# Import core analysis functions
 from nta_analysis import (
     CONFIG,
     read_nta_file,
@@ -28,12 +27,6 @@ from nta_analysis import (
     normalize_distributions_with_uncertainty,
     calculate_cumulative_distributions_with_uncertainty,
     calculate_percentile_statistics_with_uncertainty,
-    create_number_plot,
-    create_volume_plot,
-    create_surface_area_plot,
-    plot_raw_counts_with_settings,
-    generate_count_vs_surface_area_plots,
-    generate_number_plots,
 )
 
 # ============================================================================
@@ -47,7 +40,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for better styling
 st.markdown("""
     <style>
     .metric-card {
@@ -56,23 +48,6 @@ st.markdown("""
         border-radius: 10px;
         text-align: center;
         margin: 10px 0;
-    }
-    .metric-title {
-        font-size: 14px;
-        color: #666;
-        margin-bottom: 10px;
-    }
-    .metric-value {
-        font-size: 28px;
-        font-weight: bold;
-        color: #1f77b4;
-    }
-    .warning-box {
-        background-color: #fff3cd;
-        border-left: 4px solid #ffc107;
-        padding: 10px;
-        margin: 10px 0;
-        border-radius: 4px;
     }
     .success-box {
         background-color: #d4edda;
@@ -90,40 +65,22 @@ st.markdown("""
 
 def initialize_session_state():
     """Initialize session state variables"""
-    
-    # Metadata fields - pre-filled from CONFIG
     if 'experimenter' not in st.session_state:
         st.session_state.experimenter = CONFIG['project_metadata'].get('experimenter', '')
-    
     if 'project' not in st.session_state:
         st.session_state.project = CONFIG['project_metadata'].get('project', '')
-    
     if 'location' not in st.session_state:
         st.session_state.location = CONFIG['project_metadata'].get('location', '')
-    
     if 'pi' not in st.session_state:
         st.session_state.pi = CONFIG['project_metadata'].get('pi', '')
-    
-    # Analysis-specific fields (will be extracted from metadata)
-    if 'sample_id' not in st.session_state:
-        st.session_state.sample_id = ''
-    
-    # Analysis results storage
     if 'analysis_complete' not in st.session_state:
         st.session_state.analysis_complete = False
-    
     if 'distribution_data' not in st.session_state:
         st.session_state.distribution_data = None
-    
     if 'metadata' not in st.session_state:
         st.session_state.metadata = None
-    
     if 'statistics' not in st.session_state:
         st.session_state.statistics = None
-    
-    if 'plots' not in st.session_state:
-        st.session_state.plots = {}
-    
     if 'uploaded_files' not in st.session_state:
         st.session_state.uploaded_files = None
 
@@ -154,22 +111,11 @@ st.sidebar.markdown("---")
 # Metadata section
 st.sidebar.subheader("👤 User Metadata")
 
-col1, col2 = st.sidebar.columns([3, 1])
-with col1:
-    st.session_state.experimenter = st.text_input(
-        "Experimenter Initials",
-        value=st.session_state.experimenter,
-        key="exp_input"
-    )
-
-with col2:
-    if st.button("🔄 Reset", help="Reset metadata to defaults", key="reset_button"):
-        st.session_state.experimenter = CONFIG['project_metadata'].get('experimenter', '')
-        st.session_state.project = CONFIG['project_metadata'].get('project', '')
-        st.session_state.location = CONFIG['project_metadata'].get('location', '')
-        st.session_state.pi = CONFIG['project_metadata'].get('pi', '')
-        st.session_state.sample_id = ''
-        st.rerun()
+st.session_state.experimenter = st.sidebar.text_input(
+    "Experimenter Initials",
+    value=st.session_state.experimenter,
+    key="exp_input"
+)
 
 st.session_state.project = st.sidebar.text_input(
     "Project Name",
@@ -191,17 +137,6 @@ st.session_state.pi = st.sidebar.text_input(
 
 st.sidebar.markdown("---")
 
-# Analysis-specific parameters (extracted from metadata)
-st.sidebar.subheader("📊 Analysis Info")
-
-st.info("""
-**Dilution & Sample ID** will be automatically extracted from the NTA file metadata.
-
-Manual metadata fields above can be customized for your records.
-""")
-
-st.sidebar.markdown("---")
-
 # Run analysis button
 if st.sidebar.button("▶️ RUN ANALYSIS", key="run_button", type="primary", use_container_width=True):
     if not uploaded_files:
@@ -215,7 +150,7 @@ if st.sidebar.button("▶️ RUN ANALYSIS", key="run_button", type="primary", us
 # ============================================================================
 
 st.title("🧪 NTA Data Analysis Tool")
-st.markdown("Comprehensive analysis of Nanoparticle Tracking Analysis data")
+st.markdown("Nanoparticle Tracking Analysis Data Processing")
 
 # Processing section
 if 'run_analysis' in st.session_state and st.session_state.run_analysis:
@@ -228,10 +163,7 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
             
             files_data = []
             for uploaded_file in uploaded_files:
-                # Convert uploaded file to temporary file-like object
                 file_content = uploaded_file.read().decode('latin1')
-                
-                # Identify sections
                 success, sections = identify_sections(file_content)
                 if success:
                     files_data.append((uploaded_file.name, file_content, sections))
@@ -272,18 +204,14 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                             identical_fields, different_fields, field_analysis = analyze_field_differences(all_files_metadata)
                             metadata = create_automated_metadata(all_files_metadata, identical_fields, different_fields, CONFIG)
                             
-                            # Update with user metadata (experimenter, project, etc.)
+                            # Update with user metadata
                             metadata['experimenter'] = st.session_state.experimenter
                             metadata['project'] = st.session_state.project
                             metadata['location'] = st.session_state.location
                             metadata['pi'] = st.session_state.pi
                             
-                            # Extract dilution from metadata (already there as 'nta_dilution')
-                            # Extract sample ID from metadata
                             sample_id_from_meta = metadata.get('sample', metadata.get('persistentID', 'unknown'))
-                            st.session_state.sample_id = sample_id_from_meta
                             
-                            # Get dilution factor from metadata
                             dilution_str = metadata.get('nta_dilution', '1.0')
                             try:
                                 dilution_factor = float(dilution_str.split('±')[0].strip()) if '±' in str(dilution_str) else float(dilution_str)
@@ -297,12 +225,12 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                             metadata = {'experimenter': st.session_state.experimenter}
                         
                         # Step 5: Apply dilution correction
-                        st.write("🔢 Applying dilution correction...")
+                        st.write("📢 Applying dilution correction...")
                         
                         success, distribution_df = apply_dilution_correction_with_uncertainty(
                             distribution_df,
                             metadata=metadata,
-                            manual_dilution=dilution_factor  # Use extracted dilution from metadata
+                            manual_dilution=dilution_factor
                         )
                         
                         if not success:
@@ -327,7 +255,7 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                         if not success:
                             st.warning(f"⚠️ Error calculating statistics: {statistics}")
                         else:
-                            # Store results in session state
+                            # Store results
                             st.session_state.distribution_data = distribution_df
                             st.session_state.metadata = metadata
                             st.session_state.statistics = statistics
@@ -348,17 +276,14 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
 if st.session_state.analysis_complete:
     st.markdown("---")
     
-    tab_summary, tab_distributions, tab_statistics, tab_plots, tab_metadata, tab_download = st.tabs(
-        ["📊 Summary", "📈 Distributions", "📉 Statistics", "🎨 Plots", "📋 Metadata", "⬇️ Download"]
+    tab_summary, tab_distributions, tab_statistics, tab_download = st.tabs(
+        ["📊 Summary", "📈 Distributions", "📉 Statistics", "⬇️ Download"]
     )
     
-    # ========================================================================
     # SUMMARY TAB
-    # ========================================================================
     with tab_summary:
         st.subheader("Analysis Summary")
         
-        # Key metrics
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
@@ -370,7 +295,6 @@ if st.session_state.analysis_complete:
             st.metric("Total Tracks", total_tracks)
         
         with col3:
-            # Find concentration value from distribution data
             dist_df = st.session_state.distribution_data
             if 'concentration_cm-3_per_mL_avg' in dist_df.columns:
                 concentration = dist_df['concentration_cm-3_per_mL_avg'].sum()
@@ -379,12 +303,10 @@ if st.session_state.analysis_complete:
                 st.metric("Concentration", "N/A")
         
         with col4:
-            # Find D50 from statistics
             if st.session_state.statistics:
                 stats = st.session_state.statistics
                 if 'linear' in stats and 'number' in stats['linear']:
                     d50 = stats['linear']['number'].get('D50_avg', 'N/A')
-                    span = stats['linear']['number'].get('span_avg', 'N/A')
                     if isinstance(d50, (int, float)):
                         st.metric("D50 (nm)", f"{d50:.2f}")
                     else:
@@ -395,19 +317,6 @@ if st.session_state.analysis_complete:
                 st.metric("D50 (nm)", "N/A")
         
         st.markdown("---")
-        
-        # Quality Control Summary
-        st.subheader("🔍 Quality Control")
-        
-        qc_alerts = st.session_state.metadata.get('quality_control_alerts', '[]')
-        if qc_alerts and qc_alerts != '[]':
-            st.markdown('<div class="warning-box"><strong>⚠️ QC Alerts:</strong><br>' + qc_alerts.replace('[', '').replace(']', '').replace("'", '') + '</div>', unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="success-box"><strong>✅ No QC alerts</strong> - Data looks good!</div>', unsafe_allow_html=True)
-        
-        st.markdown("---")
-        
-        # Sample Information
         st.subheader("📋 Sample Information")
         
         col1, col2 = st.columns(2)
@@ -419,19 +328,13 @@ if st.session_state.analysis_complete:
         
         with col2:
             st.write(f"**PI:** {st.session_state.pi}")
-            st.write(f"**Sample ID:** {st.session_state.sample_id}")
-            # Get dilution from metadata
             dilution_val = st.session_state.metadata.get('nta_dilution', 'N/A')
             st.write(f"**Dilution Factor:** {dilution_val}")
         
         st.markdown("---")
-        
-        # Simple visualization
         st.subheader("📊 Quick Visualization")
         
         dist_df = st.session_state.distribution_data
-        
-        # Find linear scale number-weighted data
         linear_data = dist_df[(dist_df['scale'] == 'linear')]
         
         if not linear_data.empty and 'size_nm' in linear_data.columns and 'number_normalized_avg' in linear_data.columns:
@@ -449,43 +352,26 @@ if st.session_state.analysis_complete:
             st.pyplot(fig)
             plt.close(fig)
     
-    # ========================================================================
     # DISTRIBUTIONS TAB
-    # ========================================================================
     with tab_distributions:
         st.subheader("Distribution Data Tables")
         
         dist_df = st.session_state.distribution_data
+        scale_filter = st.radio("Scale", ["linear", "logarithmic"], horizontal=True)
         
-        # Filter options
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            scale_filter = st.radio("Scale", ["linear", "logarithmic"], horizontal=True)
-        
-        with col2:
-            # Get available columns
-            value_cols = [col for col in dist_df.columns if '_avg' in col]
-            
-            if value_cols:
-                st.info(f"✓ Found {len(dist_df)} data points in {scale_filter} scale")
-        
-        # Filter data
         filtered_df = dist_df[dist_df['scale'] == scale_filter].copy()
         
         if not filtered_df.empty:
-            # Select columns to display
             display_cols = ['size_nm']
             display_cols += [col for col in filtered_df.columns if '_avg' in col or '_sd' in col]
             display_cols = [col for col in display_cols if col in filtered_df.columns]
             
             st.dataframe(
                 filtered_df[display_cols].sort_values('size_nm'),
-                use_container_width=True,
+                width='stretch',
                 height=400
             )
             
-            # Download as CSV
             csv_data = filtered_df[display_cols].to_csv(index=False)
             st.download_button(
                 label="📥 Download as CSV",
@@ -496,16 +382,13 @@ if st.session_state.analysis_complete:
         else:
             st.warning(f"No data available for {scale_filter} scale")
     
-    # ========================================================================
     # STATISTICS TAB
-    # ========================================================================
     with tab_statistics:
         st.subheader("Statistical Summary")
         
         if st.session_state.statistics:
             stats = st.session_state.statistics
             
-            # Create a nice summary table
             stats_list = []
             
             for scale in ['linear', 'logarithmic']:
@@ -525,9 +408,8 @@ if st.session_state.analysis_complete:
             
             if stats_list:
                 stats_df = pd.DataFrame(stats_list)
-                st.dataframe(stats_df, use_container_width=True)
+                st.dataframe(stats_df, width='stretch')
                 
-                # Download detailed statistics
                 stats_csv = stats_df.to_csv(index=False)
                 st.download_button(
                     label="📥 Download Statistics",
@@ -538,78 +420,27 @@ if st.session_state.analysis_complete:
         else:
             st.warning("No statistics available")
     
-    # ========================================================================
-    # PLOTS TAB
-    # ========================================================================
-    with tab_plots:
-        st.subheader("Distribution Visualizations")
-        
-        st.info("📌 Plot generation coming soon! For now, use the distributions data in other tabs to create plots in your preferred tool.")
-        
-        st.markdown("""
-        The analysis has generated complete distribution data. You can:
-        - Download distribution data as CSV (Distributions tab)
-        - Create custom plots in Excel, R, Python, or other tools
-        - Use the statistics (D10, D50, D90) from the Statistics tab
-        
-        Full plotting functionality will be available in the next update.
-        """)
-    
-    # ========================================================================
-    # METADATA TAB
-    # ========================================================================
-    with tab_metadata:
-        st.subheader("Complete Metadata")
-        
-        if st.session_state.metadata:
-            metadata_df = pd.DataFrame(
-                [(k, v) for k, v in st.session_state.metadata.items()],
-                columns=['Field', 'Value']
-            )
-            
-            st.dataframe(metadata_df, use_container_width=True, height=500)
-            
-            # Download as CSV
-            csv_data = metadata_df.to_csv(index=False)
-            st.download_button(
-                label="📥 Download Metadata",
-                data=csv_data,
-                file_name="metadata.csv",
-                mime="text/csv"
-            )
-        else:
-            st.warning("No metadata available")
-    
-    # ========================================================================
     # DOWNLOAD TAB
-    # ========================================================================
     with tab_download:
         st.subheader("Download Analysis Results")
         
-        st.markdown("""
-        Export your complete analysis results:
-        - **CSV files** with all data and metadata
-        - **PNG images** of all visualizations
-        - **Summary report** with key findings
-        """)
+        st.markdown("Export your complete analysis results:")
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         
         with col1:
             st.subheader("📊 Data")
             
-            # Distribution data
             dist_df = st.session_state.distribution_data
             csv_data = dist_df.to_csv(index=False)
             st.download_button(
                 label="📥 Distribution Data (CSV)",
                 data=csv_data,
-                file_name=f"{st.session_state.sample_id or 'sample'}_distribution.csv",
+                file_name="distribution.csv",
                 mime="text/csv",
                 key="dist_csv"
             )
             
-            # Metadata
             if st.session_state.metadata:
                 metadata_df = pd.DataFrame(
                     [(k, v) for k, v in st.session_state.metadata.items()],
@@ -619,7 +450,7 @@ if st.session_state.analysis_complete:
                 st.download_button(
                     label="📥 Metadata (CSV)",
                     data=csv_data,
-                    file_name=f"{st.session_state.sample_id or 'sample'}_metadata.csv",
+                    file_name="metadata.csv",
                     mime="text/csv",
                     key="meta_csv"
                 )
@@ -628,7 +459,6 @@ if st.session_state.analysis_complete:
             st.subheader("📉 Statistics")
             
             if st.session_state.statistics:
-                # Convert statistics to DataFrame for download
                 stats_list = []
                 stats = st.session_state.statistics
                 
@@ -647,18 +477,10 @@ if st.session_state.analysis_complete:
                 st.download_button(
                     label="📥 Statistics (CSV)",
                     data=csv_data,
-                    file_name=f"{st.session_state.sample_id or 'sample'}_statistics.csv",
+                    file_name="statistics.csv",
                     mime="text/csv",
                     key="stats_csv"
                 )
-        
-        with col3:
-            st.subheader("🎨 Plots")
-            
-            st.info("Click 'Generate' in the Plots tab to create visualizations, then download them from there.")
-        
-        st.markdown("---")
-        st.info("💡 All files include a timestamp and your metadata for complete traceability.")
 
 else:
     # No analysis yet
@@ -669,13 +491,6 @@ else:
     1. **Upload files** - Use the sidebar to upload one or more NTA .txt files
     2. **Enter metadata** - Customize experimenter, project, and sample information
     3. **Run analysis** - Click the 'RUN ANALYSIS' button to process your data
-    4. **View results** - Check the Summary, Distributions, Statistics, and Plots tabs
-    5. **Download** - Export your results in CSV, PNG, and PDF formats
-    
-    The app will automatically:
-    - Read and validate your NTA data files
-    - Average multiple replicates with uncertainty quantification
-    - Extract comprehensive metadata
-    - Calculate distribution statistics (D10, D50, D90, span)
-    - Generate publication-quality visualizations
+    4. **View results** - Check the Summary, Distributions, and Statistics tabs
+    5. **Download** - Export your results in CSV format
     """)
