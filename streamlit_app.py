@@ -368,8 +368,7 @@ if st.session_state.analysis_complete:
             
             st.dataframe(
                 filtered_df[display_cols].sort_values('size_nm'),
-                width='stretch',
-                height=400
+                use_container_width=True
             )
             
             csv_data = filtered_df[display_cols].to_csv(index=False)
@@ -408,7 +407,7 @@ if st.session_state.analysis_complete:
             
             if stats_list:
                 stats_df = pd.DataFrame(stats_list)
-                st.dataframe(stats_df, width='stretch')
+                st.dataframe(stats_df, use_container_width=True)
                 
                 stats_csv = stats_df.to_csv(index=False)
                 st.download_button(
