@@ -104,12 +104,9 @@ def initialize_session_state():
     if 'pi' not in st.session_state:
         st.session_state.pi = CONFIG['project_metadata'].get('pi', '')
     
-    # Analysis-specific fields
+    # Analysis-specific fields (will be extracted from metadata)
     if 'sample_id' not in st.session_state:
         st.session_state.sample_id = ''
-    
-    if 'dilution_factor' not in st.session_state:
-        st.session_state.dilution_factor = 1.0
     
     # Analysis results storage
     if 'analysis_complete' not in st.session_state:
@@ -166,13 +163,12 @@ with col1:
     )
 
 with col2:
-    if st.button("🔄 Reset", help="Reset all metadata to defaults", key="reset_button"):
+    if st.button("🔄 Reset", help="Reset metadata to defaults", key="reset_button"):
         st.session_state.experimenter = CONFIG['project_metadata'].get('experimenter', '')
         st.session_state.project = CONFIG['project_metadata'].get('project', '')
         st.session_state.location = CONFIG['project_metadata'].get('location', '')
         st.session_state.pi = CONFIG['project_metadata'].get('pi', '')
         st.session_state.sample_id = ''
-        st.session_state.dilution_factor = 1.0
         st.rerun()
 
 st.session_state.project = st.sidebar.text_input(
@@ -195,22 +191,14 @@ st.session_state.pi = st.sidebar.text_input(
 
 st.sidebar.markdown("---")
 
-# Analysis-specific parameters
-st.sidebar.subheader("🔬 Analysis Parameters")
+# Analysis-specific parameters (extracted from metadata)
+st.sidebar.subheader("📊 Analysis Info")
 
-st.session_state.sample_id = st.sidebar.text_input(
-    "Sample ID",
-    value=st.session_state.sample_id,
-    key="sample_input"
-)
+st.info("""
+**Dilution & Sample ID** will be automatically extracted from the NTA file metadata.
 
-st.session_state.dilution_factor = st.sidebar.number_input(
-    "Dilution Factor",
-    value=st.session_state.dilution_factor,
-    min_value=0.1,
-    step=0.5,
-    key="dilution_input"
-)
+Manual metadata fields above can be customized for your records.
+""")
 
 st.sidebar.markdown("---")
 
@@ -284,12 +272,26 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                             identical_fields, different_fields, field_analysis = analyze_field_differences(all_files_metadata)
                             metadata = create_automated_metadata(all_files_metadata, identical_fields, different_fields, CONFIG)
                             
-                            # Update with user metadata
+                            # Update with user metadata (experimenter, project, etc.)
                             metadata['experimenter'] = st.session_state.experimenter
                             metadata['project'] = st.session_state.project
                             metadata['location'] = st.session_state.location
                             metadata['pi'] = st.session_state.pi
-                            metadata['sample_id'] = st.session_state.sample_id
+                            
+                            # Extract dilution from metadata (already there as 'nta_dilution')
+                            # Extract sample ID from metadata
+                            sample_id_from_meta = metadata.get('sample', metadata.get('persistentID', 'unknown'))
+                            st.session_state.sample_id = sample_id_from_meta
+                            
+                            # Get dilution factor from metadata
+                            dilution_str = metadata.get('nta_dilution', '1.0')
+                            try:
+                                dilution_factor = float(dilution_str.split('±')[0].strip()) if '±' in str(dilution_str) else float(dilution_str)
+                            except (ValueError, TypeError):
+                                dilution_factor = 1.0
+                            
+                            st.write(f"📌 Using dilution factor: {dilution_factor}")
+                            st.write(f"📌 Sample ID: {sample_id_from_meta}")
                         else:
                             st.warning("⚠️ Could not extract metadata, using defaults")
                             metadata = {'experimenter': st.session_state.experimenter}
@@ -300,7 +302,7 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                         success, distribution_df = apply_dilution_correction_with_uncertainty(
                             distribution_df,
                             metadata=metadata,
-                            manual_dilution=st.session_state.dilution_factor
+                            manual_dilution=dilution_factor  # Use extracted dilution from metadata
                         )
                         
                         if not success:
@@ -418,7 +420,9 @@ if st.session_state.analysis_complete:
         with col2:
             st.write(f"**PI:** {st.session_state.pi}")
             st.write(f"**Sample ID:** {st.session_state.sample_id}")
-            st.write(f"**Dilution Factor:** {st.session_state.dilution_factor}")
+            # Get dilution from metadata
+            dilution_val = st.session_state.metadata.get('nta_dilution', 'N/A')
+            st.write(f"**Dilution Factor:** {dilution_val}")
         
         st.markdown("---")
         
