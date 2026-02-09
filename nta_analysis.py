@@ -868,3 +868,120 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
                 continue
     
     return True, stats
+
+
+# ============================================================================
+# DERIVED METRICS CALCULATION
+# ============================================================================
+
+def calculate_concentration_totals_with_uncertainty(df):
+    """Calculate total particles, volume, and surface area with uncertainty propagation."""
+    try:
+        # Only use linear scale data
+        linear_df = df[df['scale'] == 'linear'].copy()
+        
+        if linear_df.empty:
+            return False, "No linear scale data available"
+        
+        # TOTAL PARTICLES PER mL (convert from cm-3)
+        particles_per_cm3_avg = linear_df['concentration_cm-3_per_mL_avg'].sum()
+        particles_per_cm3_sd = np.sqrt((linear_df['concentration_cm-3_per_mL_sd'] ** 2).sum())
+        
+        # Convert cm-3 to mL-1 (1 mL = 1 cm3)
+        particles_per_mL_avg = particles_per_cm3_avg
+        particles_per_mL_sd = particles_per_cm3_sd
+        
+        # TOTAL VOLUME (convert from nm^3 to µL)
+        # 1 nm = 10^-9 m = 10^-7 cm
+        # 1 nm^3 = 10^-21 cm^3 = 10^-21 mL = 10^-18 µL
+        volume_nm3_avg = linear_df['volume_nm^3_per_mL_avg'].sum()
+        volume_nm3_sd = np.sqrt((linear_df['volume_nm^3_per_mL_sd'] ** 2).sum())
+        
+        volume_uL_per_mL_avg = volume_nm3_avg * 1e-18
+        volume_uL_per_mL_sd = volume_nm3_sd * 1e-18
+        
+        # TOTAL SURFACE AREA (convert from nm^2 to cm^2)
+        # 1 nm^2 = (10^-7 cm)^2 = 10^-14 cm^2
+        area_nm2_avg = linear_df['area_nm^2_per_mL_avg'].sum()
+        area_nm2_sd = np.sqrt((linear_df['area_nm^2_per_mL_sd'] ** 2).sum())
+        
+        area_cm2_per_mL_avg = area_nm2_avg * 1e-14
+        area_cm2_per_mL_sd = area_nm2_sd * 1e-14
+        
+        # VOLUME PERCENTAGE (volume / total as percentage)
+        # Assuming typical reference volume - this would need adjustment
+        volume_percentage_avg = (volume_uL_per_mL_avg / 1.0) * 100 if volume_uL_per_mL_avg > 0 else 0
+        volume_percentage_sd = (volume_uL_per_mL_sd / 1.0) * 100 if volume_uL_per_mL_avg > 0 else 0
+        
+        # SPECIFIC SURFACE AREA (m^2/cm^3 of sample)
+        # = total surface area (cm^2/mL) / total volume (mL)
+        if volume_uL_per_mL_avg > 0:
+            # Convert mL to cm^3 (1:1), then uL to mL for volume
+            specific_sa_m2_per_cm3 = (area_cm2_per_mL_avg * 100) / (volume_uL_per_mL_avg * 1e-6)
+        else:
+            specific_sa_m2_per_cm3 = 0
+        
+        return True, {
+            'nta_total_particles_per_mL_avg': particles_per_mL_avg,
+            'nta_total_particles_per_mL_sd': particles_per_mL_sd,
+            'nta_total_volume_uL_per_mL_avg': volume_uL_per_mL_avg,
+            'nta_total_volume_uL_per_mL_sd': volume_uL_per_mL_sd,
+            'nta_total_surface_area_cm2_per_mL_avg': area_cm2_per_mL_avg,
+            'nta_total_surface_area_cm2_per_mL_sd': area_cm2_per_mL_sd,
+            'nta_volume_percentage_avg': volume_percentage_avg,
+            'nta_volume_percentage_sd': volume_percentage_sd,
+            'nta_specific_surface_area_m2_per_cm3': specific_sa_m2_per_cm3,
+        }
+    
+    except Exception as e:
+        return False, f"Error calculating concentration totals: {str(e)}"
+
+
+def format_statistics_with_bounds(statistics):
+    """Format percentile statistics with uncertainty bounds for metadata output."""
+    formatted = {}
+    
+    try:
+        for scale in ['linear', 'logarithmic']:
+            if scale not in statistics or not isinstance(statistics[scale], dict):
+                continue
+            
+            for dist_type in statistics[scale]:
+                stat_dict = statistics[scale][dist_type]
+                
+                # Format D10
+                d10_avg = stat_dict.get('D10_avg')
+                d10_lower = stat_dict.get('D10_lower')
+                d10_upper = stat_dict.get('D10_upper')
+                if d10_avg is not None and not np.isnan(d10_avg):
+                    d10_str = f"{d10_avg:.2f} nm ({d10_lower:.2f} - {d10_upper:.2f})"
+                    formatted[f'nta_{scale}_number_d10'] = d10_str
+                
+                # Format D50
+                d50_avg = stat_dict.get('D50_avg')
+                d50_lower = stat_dict.get('D50_lower')
+                d50_upper = stat_dict.get('D50_upper')
+                if d50_avg is not None and not np.isnan(d50_avg):
+                    d50_str = f"{d50_avg:.2f} nm ({d50_lower:.2f} - {d50_upper:.2f})"
+                    formatted[f'nta_{scale}_{dist_type}_d50'] = d50_str
+                
+                # Format D90
+                d90_avg = stat_dict.get('D90_avg')
+                d90_lower = stat_dict.get('D90_lower')
+                d90_upper = stat_dict.get('D90_upper')
+                if d90_avg is not None and not np.isnan(d90_avg):
+                    d90_str = f"{d90_avg:.2f} nm ({d90_lower:.2f} - {d90_upper:.2f})"
+                    formatted[f'nta_{scale}_{dist_type}_d90'] = d90_str
+                
+                # Format Span
+                span_avg = stat_dict.get('span_avg')
+                span_lower = stat_dict.get('span_lower')
+                span_upper = stat_dict.get('span_upper')
+                if span_avg is not None and not np.isnan(span_avg):
+                    span_str = f"{span_avg:.3f} ({span_lower:.3f} - {span_upper:.3f})"
+                    formatted[f'nta_{scale}_{dist_type}_span'] = span_str
+    
+    except Exception as e:
+        pass  # Return what we have if there's an error
+    
+    return formatted
