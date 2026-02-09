@@ -37,7 +37,7 @@ from nta_analysis import (
 
 st.set_page_config(
     page_title="NTA Data Analysis",
-    page_icon="ðŸ§ª",
+    page_icon="🧪",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -74,6 +74,33 @@ def metadata_to_tsv(metadata_dict):
         lines.append(f"{key}\t{value}\t")
     return "\n".join(lines)
 
+
+
+def distribution_to_tsv(df):
+    """Convert distribution dataframe to tab-separated text format"""
+    return df.to_csv(sep='\t', index=False)
+
+
+def statistics_to_tsv(statistics_dict):
+    """Convert statistics dictionary to tab-separated text format"""
+    import pandas as pd
+    stats_list = []
+    
+    for scale in statistics_dict:
+        if isinstance(statistics_dict[scale], dict):
+            for dist_type in statistics_dict[scale]:
+                stat_dict = statistics_dict[scale][dist_type]
+                row = {
+                    'Scale': scale,
+                    'Distribution': dist_type,
+                    **stat_dict
+                }
+                stats_list.append(row)
+    
+    if stats_list:
+        stats_df = pd.DataFrame(stats_list)
+        return stats_df.to_csv(sep='\t', index=False)
+    return ""
 # SESSION STATE INITIALIZATION
 # ============================================================================
 
@@ -118,7 +145,7 @@ uploaded_files = st.sidebar.file_uploader(
 
 if uploaded_files:
     st.session_state.uploaded_files = uploaded_files
-    st.sidebar.success(f"âœ… {len(uploaded_files)} file(s) uploaded")
+    st.sidebar.success(f"✅ {len(uploaded_files)} file(s) uploaded")
 
 st.sidebar.markdown("---")
 
@@ -152,9 +179,9 @@ st.session_state.pi = st.sidebar.text_input(
 st.sidebar.markdown("---")
 
 # Run analysis button
-if st.sidebar.button("â–¶ï¸ RUN ANALYSIS", key="run_button", type="primary", use_container_width=True):
+if st.sidebar.button("¶ï¸ RUN ANALYSIS", key="run_button", type="primary", use_container_width=True):
     if not uploaded_files:
-        st.sidebar.error("âŒ Please upload at least one file")
+        st.sidebar.error("Œ Please upload at least one file")
     else:
         st.session_state.analysis_complete = False
         st.session_state.run_analysis = True
@@ -170,10 +197,10 @@ st.markdown("Nanoparticle Tracking Analysis Data Processing")
 if 'run_analysis' in st.session_state and st.session_state.run_analysis:
     st.markdown("---")
     
-    with st.spinner("â³ Processing files..."):
+    with st.spinner("³ Processing files..."):
         try:
             # Step 1: Read files
-            st.write("ðŸ“– Reading files...")
+            st.write("📖 Reading files...")
             
             files_data = []
             for uploaded_file in uploaded_files:
@@ -182,13 +209,13 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                 if success:
                     files_data.append((uploaded_file.name, file_content, sections))
                 else:
-                    st.warning(f"âš ï¸ Could not identify sections in {uploaded_file.name}")
+                    st.warning(f"⚠️ ï¸ Could not identify sections in {uploaded_file.name}")
             
             if not files_data:
-                st.error("âŒ Could not process any files")
+                st.error("Œ Could not process any files")
             else:
                 # Step 2: Extract distribution data
-                st.write("ðŸ“Š Extracting distribution data...")
+                st.write("📊 Extracting distribution data...")
                 
                 distribution_dfs = []
                 for filename, content, sections in files_data:
@@ -196,22 +223,22 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                     if success:
                         distribution_dfs.append(result)
                     else:
-                        st.warning(f"âš ï¸ Could not extract data from {filename}")
+                        st.warning(f"⚠️ ï¸ Could not extract data from {filename}")
                 
                 if not distribution_dfs:
-                    st.error("âŒ Could not extract data from any files")
+                    st.error("Œ Could not extract data from any files")
                 else:
                     # Step 3: Average replicates
-                    st.write("ðŸ“ˆ Averaging replicates...")
+                    st.write("📈 Averaging replicates...")
                     
                     filenames = [f[0] for f in files_data]
                     success, distribution_df = average_replicate_data(distribution_dfs, filenames)
                     
                     if not success:
-                        st.error(f"âŒ Error averaging data: {distribution_df}")
+                        st.error(f"Œ Error averaging data: {distribution_df}")
                     else:
                         # Step 4: Extract metadata
-                        st.write("ðŸ“‹ Extracting metadata...")
+                        st.write("📊 Extracting metadata...")
                         
                         success, all_files_metadata = extract_metadata_from_all_files(files_data)
                         if success:
@@ -232,14 +259,14 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                             except (ValueError, TypeError):
                                 dilution_factor = 1.0
                             
-                            st.write(f"ðŸ“Œ Using dilution factor: {dilution_factor}")
-                            st.write(f"ðŸ“Œ Sample ID: {sample_id_from_meta}")
+                            st.write(f"Œ Using dilution factor: {dilution_factor}")
+                            st.write(f"Œ Sample ID: {sample_id_from_meta}")
                         else:
                             st.warning("âš ï¸ Could not extract metadata, using defaults")
                             metadata = {'experimenter': st.session_state.experimenter}
                         
                         # Step 5: Apply dilution correction
-                        st.write("ðŸ“¢ Applying dilution correction...")
+                        st.write("📢 Applying dilution correction...")
                         
                         success, distribution_df = apply_dilution_correction_with_uncertainty(
                             distribution_df,
@@ -248,10 +275,10 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                         )
                         
                         if not success:
-                            st.warning(f"âš ï¸ {distribution_df}")
+                            st.warning(f"⚠️ ï¸ {distribution_df}")
                         
                         # Step 6: Calculate distributions
-                        st.write("ðŸ“Š Calculating normalized distributions...")
+                        st.write("📊 Calculating normalized distributions...")
                         
                         success, distribution_df = normalize_distributions_with_uncertainty(distribution_df, metadata)
                         
@@ -259,18 +286,18 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                             success, distribution_df = calculate_cumulative_distributions_with_uncertainty(distribution_df)
                         
                         if not success:
-                            st.warning(f"âš ï¸ Error calculating distributions: {distribution_df}")
+                            st.warning(f"⚠️ ï¸ Error calculating distributions: {distribution_df}")
                         
                         # Step 7: Calculate statistics
-                        st.write("ðŸ“‰ Calculating statistics...")
+                        st.write("📉 Calculating statistics...")
                         
                         success, statistics = calculate_percentile_statistics_with_uncertainty(distribution_df)
                         
                         if not success:
-                            st.warning(f"âš ï¸ Error calculating statistics: {statistics}")
+                            st.warning(f"⚠️ ï¸ Error calculating statistics: {statistics}")
                         else:
                             # Step 7b: Calculate concentration totals
-                            st.write("Calculating concentration totals...")
+                            st.write("📊 Calculating concentration totals...")
                             
                             success, totals = calculate_concentration_totals_with_uncertainty(distribution_df)
                             
@@ -289,7 +316,7 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                                 st.warning(f"Error: {totals}")
                             
                             # Step 7c: Format statistics with bounds
-                            st.write("Formatting statistics...")
+                            st.write("📉 Formatting statistics...")
                             formatted_stats = format_statistics_with_bounds(statistics)
                             metadata.update(formatted_stats)
                             
@@ -310,7 +337,7 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                             st.rerun()
         
         except Exception as e:
-            st.error(f"âŒ Error during analysis: {str(e)}")
+            st.error(f"Œ Error during analysis: {str(e)}")
             st.session_state.run_analysis = False
 
 # ============================================================================
@@ -321,7 +348,7 @@ if st.session_state.analysis_complete:
     st.markdown("---")
     
     tab_summary, tab_distributions, tab_statistics, tab_download = st.tabs(
-        ["ðŸ“Š Summary", "ðŸ“ˆ Distributions", "ðŸ“‰ Statistics", "â¬‡ï¸ Download"]
+        ["Š Summary", "ˆ Distributions", "‰ Statistics", "‡ï¸ Download"]
     )
     
     # SUMMARY TAB
@@ -362,7 +389,7 @@ if st.session_state.analysis_complete:
                 st.metric("D50 (nm)", "N/A")
         
         st.markdown("---")
-        st.subheader("ðŸ“‹ Sample Information")
+        st.subheader("📋 Sample Information")
         
         col1, col2 = st.columns(2)
         
@@ -377,7 +404,7 @@ if st.session_state.analysis_complete:
             st.write(f"**Dilution Factor:** {dilution_val}")
         
         st.markdown("---")
-        st.subheader("ðŸ“Š Quick Visualization")
+        st.subheader("Quick Visualization")
         
         dist_df = st.session_state.distribution_data
         linear_data = dist_df[(dist_df['scale'] == 'linear')]
@@ -418,7 +445,7 @@ if st.session_state.analysis_complete:
             
             csv_data = filtered_df[display_cols].to_csv(index=False)
             st.download_button(
-                label="ðŸ“¥ Download as CSV",
+                label="¥ Download as CSV",
                 data=csv_data,
                 file_name=f"distribution_{scale_filter}.csv",
                 mime="text/csv"
@@ -457,9 +484,9 @@ if st.session_state.analysis_complete:
                     
                     stats_csv = stats_df.to_csv(index=False)
                     st.download_button(
-                        label="ðŸ“¥ Download Statistics",
+                        label="¥ Download Statistics",
                         data=stats_csv,
-                        file_name="statistics.csv",
+                        file_name=f"Data_{unique_id}_statistics.csv",
                         mime="text/csv"
                     )
                 else:
@@ -474,18 +501,30 @@ if st.session_state.analysis_complete:
         st.subheader("📥 Download Analysis Results")
         
         st.markdown("Export your complete analysis results:")
+        st.info("📝 All files are exported as tab-separated TXT format for easy import into Excel or other programs")
+
+        # Get unique ID for file naming
+        persistent_id = st.session_state.metadata.get('persistentID', 'NTA_analysis')
+        # Extract shorter unique ID (remove _00XX_avg3 suffix)
+        # e.g., "CBP_LEAF_5455892_2_20250710_NTA_size_0010_avg3" -> "CBP_LEAF_5455892_2_20250710_NTA_size"
+        import re
+        unique_id = re.sub(r'_\d{4}_avg\d+$', '', persistent_id)
+        
+        # Get number of replicates
+        num_replicates = st.session_state.metadata.get('num_replicates', 1)
+
         
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("ðŸ“Š Data")
+            st.subheader("📊 Data")
             
             dist_df = st.session_state.distribution_data
             csv_data = dist_df.to_csv(index=False)
             st.download_button(
-                label="ðŸ“¥ Distribution Data (CSV)",
+                label="¥ Distribution Data (CSV)",
                 data=csv_data,
-                file_name="distribution.csv",
+                file_name=f"Data_{unique_id}_distribution.csv",
                 mime="text/csv",
                 key="dist_csv"
             )
@@ -497,25 +536,16 @@ if st.session_state.analysis_complete:
                 )
                 csv_data = metadata_df.to_csv(index=False)
                 st.download_button(
-                    label="ðŸ“¥ Metadata (CSV)",
+                    label="¥ Metadata (CSV)",
                     data=csv_data,
-                    file_name="metadata.csv",
+                    file_name=f"Data_{unique_id}_metadata.csv",
                     mime="text/csv",
                     key="meta_csv"
                 )
                 
-                # Tab-separated TXT format (matching original Jupyter output)
-                txt_data = metadata_to_tsv(st.session_state.metadata)
-                st.download_button(
-                    label="Download Metadata (TXT)",
-                    data=txt_data,
-                    file_name="metadata.txt",
-                    mime="text/plain",
-                    key="meta_txt"
-                )
         
         with col2:
-            st.subheader("ðŸ“‰ Statistics")
+            st.subheader("📉 Statistics")
             
             if st.session_state.statistics and isinstance(st.session_state.statistics, dict):
                 stats_list = []
@@ -537,9 +567,9 @@ if st.session_state.analysis_complete:
                         stats_df = pd.DataFrame(stats_list)
                         csv_data = stats_df.to_csv(index=False)
                         st.download_button(
-                            label="ðŸ“¥ Statistics (CSV)",
+                            label="¥ Statistics (CSV)",
                             data=csv_data,
-                            file_name="statistics.csv",
+                            file_name=f"Data_{unique_id}_statistics.csv",
                             mime="text/csv",
                             key="stats_csv"
                         )
@@ -552,7 +582,7 @@ if st.session_state.analysis_complete:
 
 else:
     # No analysis yet
-    st.info("ðŸ‘† Upload NTA files and click 'RUN ANALYSIS' to begin")
+    st.info("† Upload NTA files and click 'RUN ANALYSIS' to begin")
     st.markdown("""
     ## How to use:
     
@@ -560,5 +590,5 @@ else:
     2. **Enter metadata** - Customize experimenter, project, and sample information
     3. **Run analysis** - Click the 'RUN ANALYSIS' button to process your data
     4. **View results** - Check the Summary, Distributions, and Statistics tabs
-    5. **Download** - Export your results in CSV format
+    5. **Download** - Export your results as tab-separated TXT files (compatible with Excel)
     """)
