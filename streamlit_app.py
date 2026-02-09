@@ -442,14 +442,6 @@ if st.session_state.analysis_complete:
                 filtered_df[display_cols].sort_values('size_nm'),
                 use_container_width=True
             )
-            
-            tsv_data = filtered_df[display_cols].to_csv(sep='\t', index=False)
-            st.download_button(
-                label="📥 Download as TXT",
-                data=tsv_data,
-                file_name=f"distribution_{scale_filter}.txt",
-                mime="text/plain"
-            )
         else:
             st.warning(f"No data available for {scale_filter} scale")
     
@@ -469,26 +461,48 @@ if st.session_state.analysis_complete:
                             if dist_type in stats[scale]:
                                 stat_dict = stats[scale][dist_type]
                                 
+                                # Format D values with confidence intervals
+                                def format_d_value(avg_val, lower_val, upper_val):
+                                    if isinstance(avg_val, (int, float)):
+                                        return f"{avg_val:.2f} ({lower_val:.2f} - {upper_val:.2f})"
+                                    return "N/A"
+                                
+                                d10_str = format_d_value(
+                                    stat_dict.get('D10_avg', 'N/A'),
+                                    stat_dict.get('D10_lower', 'N/A'),
+                                    stat_dict.get('D10_upper', 'N/A')
+                                ) if all(isinstance(stat_dict.get(k), (int, float)) for k in ['D10_avg', 'D10_lower', 'D10_upper']) else 'N/A'
+                                
+                                d50_str = format_d_value(
+                                    stat_dict.get('D50_avg', 'N/A'),
+                                    stat_dict.get('D50_lower', 'N/A'),
+                                    stat_dict.get('D50_upper', 'N/A')
+                                ) if all(isinstance(stat_dict.get(k), (int, float)) for k in ['D50_avg', 'D50_lower', 'D50_upper']) else 'N/A'
+                                
+                                d90_str = format_d_value(
+                                    stat_dict.get('D90_avg', 'N/A'),
+                                    stat_dict.get('D90_lower', 'N/A'),
+                                    stat_dict.get('D90_upper', 'N/A')
+                                ) if all(isinstance(stat_dict.get(k), (int, float)) for k in ['D90_avg', 'D90_lower', 'D90_upper']) else 'N/A'
+                                
+                                span_str = format_d_value(
+                                    stat_dict.get('span_avg', 'N/A'),
+                                    stat_dict.get('span_lower', 'N/A'),
+                                    stat_dict.get('span_upper', 'N/A')
+                                ) if all(isinstance(stat_dict.get(k), (int, float)) for k in ['span_avg', 'span_lower', 'span_upper']) else 'N/A'
+                                
                                 stats_list.append({
                                     'Scale': scale.capitalize(),
                                     'Distribution': dist_type.replace('_', ' ').title(),
-                                    'D10': f"{stat_dict.get('D10_avg', 'N/A'):.2f}" if isinstance(stat_dict.get('D10_avg'), (int, float)) else 'N/A',
-                                    'D50': f"{stat_dict.get('D50_avg', 'N/A'):.2f}" if isinstance(stat_dict.get('D50_avg'), (int, float)) else 'N/A',
-                                    'D90': f"{stat_dict.get('D90_avg', 'N/A'):.2f}" if isinstance(stat_dict.get('D90_avg'), (int, float)) else 'N/A',
-                                    'Span': f"{stat_dict.get('span_avg', 'N/A'):.3f}" if isinstance(stat_dict.get('span_avg'), (int, float)) else 'N/A',
+                                    'D10 (nm)': d10_str,
+                                    'D50 (nm)': d50_str,
+                                    'D90 (nm)': d90_str,
+                                    'Span': span_str,
                                 })
                 
                 if stats_list:
                     stats_df = pd.DataFrame(stats_list)
                     st.dataframe(stats_df, use_container_width=True)
-                    
-                    stats_tsv = stats_df.to_csv(sep='\t', index=False)
-                    st.download_button(
-                        label="📥 Download Statistics",
-                        data=stats_tsv,
-                        file_name="statistics.txt",
-                        mime="text/plain"
-                    )
                 else:
                     st.info("No statistics data available")
             except Exception as e:
