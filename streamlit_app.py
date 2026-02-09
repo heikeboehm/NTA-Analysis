@@ -31,6 +31,13 @@ from nta_analysis import (
     format_statistics_with_bounds,
 )
 
+# Import plotting functions
+try:
+    import nta_plots
+    PLOTTING_AVAILABLE = True
+except ImportError:
+    PLOTTING_AVAILABLE = False
+
 # ============================================================================
 # PAGE CONFIG & STYLING
 # ============================================================================
@@ -347,8 +354,8 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
 if st.session_state.analysis_complete:
     st.markdown("---")
     
-    tab_summary, tab_distributions, tab_statistics, tab_download = st.tabs(
-        ["📊 Summary", "📈 Distributions", "📉 Statistics", "📥 Download"]
+    tab_summary, tab_distributions, tab_statistics, tab_plots, tab_download = st.tabs(
+        ["📊 Summary", "📈 Distributions", "📉 Statistics", "📊 Plots", "📥 Download"]
     )
     
     # SUMMARY TAB
@@ -509,6 +516,100 @@ if st.session_state.analysis_complete:
                 st.warning(f"Error processing statistics: {str(e)}")
         else:
             st.warning("No statistics available")
+    
+    # PLOTS TAB
+    with tab_plots:
+        st.subheader("📊 Sophisticated Data Visualizations")
+        
+        if not PLOTTING_AVAILABLE:
+            st.error("⚠️ Plotting module not available. Please ensure nta_plots.py is in the project.")
+        else:
+            st.markdown("Select plots to generate from your NTA data:")
+            
+            # Create columns for plot selection
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                plot_number = st.checkbox("📊 Number-Weighted Distribution", value=True)
+                plot_volume = st.checkbox("📊 Volume-Weighted Distribution", value=False)
+            
+            with col2:
+                plot_surface = st.checkbox("📊 Surface Area-Weighted Distribution", value=False)
+                plot_raw = st.checkbox("📊 Raw Particle Counts", value=False)
+            
+            with col3:
+                plot_vol_theo = st.checkbox("📊 Counts vs Volume", value=False)
+                plot_surf_theo = st.checkbox("📊 Counts vs Surface Area", value=False)
+            
+            if st.button("🎨 Generate Selected Plots", use_container_width=True):
+                dist_df = st.session_state.distribution_data
+                metadata = st.session_state.metadata
+                
+                try:
+                    # Number-weighted distribution
+                    if plot_number:
+                        with st.expander("📊 Number-Weighted Distribution", expanded=True):
+                            try:
+                                fig = nta_plots.create_number_distribution_figure(dist_df, metadata)
+                                st.pyplot(fig)
+                                plt.close(fig)
+                            except Exception as e:
+                                st.warning(f"Could not generate number distribution plot: {str(e)}")
+                    
+                    # Volume-weighted distribution
+                    if plot_volume:
+                        with st.expander("📊 Volume-Weighted Distribution"):
+                            try:
+                                fig = nta_plots.create_volume_distribution_figure(dist_df, metadata)
+                                st.pyplot(fig)
+                                plt.close(fig)
+                            except Exception as e:
+                                st.warning(f"Could not generate volume distribution plot: {str(e)}")
+                    
+                    # Surface area-weighted distribution
+                    if plot_surface:
+                        with st.expander("📊 Surface Area-Weighted Distribution"):
+                            try:
+                                fig = nta_plots.create_surface_area_distribution_figure(dist_df, metadata)
+                                st.pyplot(fig)
+                                plt.close(fig)
+                            except Exception as e:
+                                st.warning(f"Could not generate surface area distribution plot: {str(e)}")
+                    
+                    # Raw particle counts
+                    if plot_raw:
+                        with st.expander("📊 Raw Particle Counts"):
+                            try:
+                                fig = nta_plots.create_raw_particle_figure(dist_df, metadata)
+                                st.pyplot(fig)
+                                plt.close(fig)
+                            except Exception as e:
+                                st.warning(f"Could not generate raw particle plot: {str(e)}")
+                    
+                    # Raw counts vs volume
+                    if plot_vol_theo:
+                        with st.expander("📊 Raw Counts vs Theoretical Volume"):
+                            try:
+                                fig = nta_plots.create_volume_theoretical_figure(dist_df, metadata)
+                                st.pyplot(fig)
+                                plt.close(fig)
+                            except Exception as e:
+                                st.warning(f"Could not generate volume theoretical plot: {str(e)}")
+                    
+                    # Raw counts vs surface area
+                    if plot_surf_theo:
+                        with st.expander("📊 Raw Counts vs Theoretical Surface Area"):
+                            try:
+                                fig = nta_plots.create_surface_theoretical_figure(dist_df, metadata)
+                                st.pyplot(fig)
+                                plt.close(fig)
+                            except Exception as e:
+                                st.warning(f"Could not generate surface theoretical plot: {str(e)}")
+                    
+                    st.success("✅ Plots generated successfully!")
+                
+                except Exception as e:
+                    st.error(f"❌ Error generating plots: {str(e)}")
     
     # DOWNLOAD TAB
     with tab_download:
