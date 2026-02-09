@@ -30,35 +30,54 @@ def lognormal_pdf(x, mu, sigma, amplitude):
     return amplitude * (1 / (x * sigma * np.sqrt(2 * np.pi))) * np.exp(-(np.log(x) - mu)**2 / (2 * sigma**2))
 
 
-def fit_lognormal_distribution(sizes, weights):
-    """Fit a lognormal distribution to size distribution data."""
+def fit_lognormal_in_logspace(sizes, weights):
+    """
+    Fit a lognormal distribution using log(size) as the independent variable.
+    This ensures the fit is calculated consistently in log-space.
+    
+    Returns: (size_range_linear, size_range_log, fitted_curve, params)
+    where curves can be displayed on both linear and log scales
+    """
     try:
-        # Initial parameter estimates
+        # Calculate fit parameters using log(size)
         size_log = np.log(sizes)
-        initial_mu = np.average(size_log, weights=weights)
-        initial_sigma = np.sqrt(np.average((size_log - initial_mu)**2, weights=weights))
-        initial_amplitude = np.max(weights) * initial_sigma * np.sqrt(2 * np.pi) * np.exp(initial_mu)
+        mu = np.average(size_log, weights=weights)
+        sigma = np.sqrt(np.average((size_log - mu)**2, weights=weights))
         
-        initial_params = [initial_mu, initial_sigma, initial_amplitude]
+        # Initial amplitude estimate
+        amplitude = np.max(weights) * sigma * np.sqrt(2 * np.pi) * np.exp(mu)
         
-        # Perform curve fitting
+        initial_params = [mu, sigma, amplitude]
+        
+        # Curve fit to lognormal PDF
         params, _ = curve_fit(
             lognormal_pdf, sizes, weights, p0=initial_params,
             bounds=([0, 0, 0], [np.inf, np.inf, np.inf]), maxfev=10000
         )
         
-        # Generate fitted curve
-        size_range = np.linspace(sizes.min(), sizes.max(), 200)
-        fitted_curve = lognormal_pdf(size_range, *params)
+        # Generate fitted curves for both linear and log display
+        size_range_lin = np.linspace(sizes.min(), sizes.max(), 300)
+        size_range_log = np.logspace(np.log10(max(sizes.min(), 10)), 
+                                     np.log10(sizes.max()), 300)
         
-        return True, (size_range, fitted_curve, params)
+        fitted_curve_lin = lognormal_pdf(size_range_lin, *params)
+        fitted_curve_log = lognormal_pdf(size_range_log, *params)
         
+        return True, (size_range_lin, size_range_log, fitted_curve_lin, 
+                     fitted_curve_log, params)
+    
     except Exception as e:
-        return False, f"Lognormal fit failed: {str(e)}"
+        return False, f"Lognormal fit in log-space failed: {str(e)}"
 
 
-def add_number_fit_curve_fixed(ax, plot_df, is_log_scale, fit_color='#F25C54'):
-    """Add lognormal fits for number distributions (both linear and log scale)."""
+def add_number_fit_curve_fixed(ax, plot_df, is_log_scale, fit_color='#F25C54', 
+                               pre_calculated_fit=None):
+    """
+    Add lognormal fit curve to number distribution plot.
+    
+    If pre_calculated_fit is provided, use those parameters.
+    Otherwise, calculate fit from data.
+    """
     fit_legend_elements = []
     
     sizes = plot_df['size_nm'].values
@@ -69,29 +88,47 @@ def add_number_fit_curve_fixed(ax, plot_df, is_log_scale, fit_color='#F25C54'):
     if not np.any(valid_mask):
         return fit_legend_elements, None
     
-    sizes, weights = sizes[valid_mask], weights[valid_mask]
+    sizes_valid = sizes[valid_mask]
+    weights_valid = weights[valid_mask]
     
-    # Use lognormal fit for both linear and log scales
-    success, result = fit_lognormal_distribution(sizes, weights)
-    if success:
-        size_range, fitted_curve, params = result
-        ax.plot(size_range, fitted_curve, '-', color=fit_color, linewidth=2.5, 
-               alpha=0.9, label='Lognormal Fit', zorder=4)
-        
-        geometric_mean = np.exp(params[0])
-        geometric_std = np.exp(params[1])
-        
-        # Add fit info to legend (consistent for both scales)
-        fit_legend_elements.append(
-            Line2D([0], [0], color=fit_color, linestyle='-', linewidth=2.5,
-                  label=f'Lognormal: geo_mean={geometric_mean:.1f} nm, geo_std={geometric_std:.2f}')
-        )
-        
-        return fit_legend_elements, ('lognormal', {'mu': params[0], 'sigma': params[1], 'amplitude': params[2], 
-                                                   'geo_mean': geometric_mean, 'geo_std': geometric_std})
+    # Use pre-calculated fit if available, otherwise calculate new one
+    if pre_calculated_fit is not None:
+        size_range_lin, size_range_log, fitted_curve_lin, fitted_curve_log, params = pre_calculated_fit
     else:
-        print(f"    Lognormal fit failed: {result}")
-        return fit_legend_elements, None
+        success, result = fit_lognormal_in_logspace(sizes_valid, weights_valid)
+        if not success:
+            return fit_legend_elements, None
+        size_range_lin, size_range_log, fitted_curve_lin, fitted_curve_log, params = result
+    
+    # Choose which fit curve to display based on scale
+    if is_log_scale:
+        size_range = size_range_log
+        fitted_curve = fitted_curve_log
+    else:
+        size_range = size_range_lin
+        fitted_curve = fitted_curve_lin
+    
+    # Plot the fit curve
+    ax.plot(size_range, fitted_curve, '-', color=fit_color, linewidth=2.5, 
+           alpha=0.9, label='Lognormal Fit', zorder=4)
+    
+    # Calculate geometric statistics
+    geometric_mean = np.exp(params[0])
+    geometric_std = np.exp(params[1])
+    
+    # Add fit info to legend (consistent for both scales)
+    fit_legend_elements.append(
+        Line2D([0], [0], color=fit_color, linestyle='-', linewidth=2.5,
+              label=f'Lognormal: μ={geometric_mean:.1f} nm, σ={geometric_std:.2f}')
+    )
+    
+    return fit_legend_elements, ('lognormal', {
+        'mu': params[0], 
+        'sigma': params[1], 
+        'amplitude': params[2],
+        'geo_mean': geometric_mean, 
+        'geo_std': geometric_std
+    })
 
 
 def add_d_value_lines_and_bands(ax, stats):
@@ -141,7 +178,8 @@ def add_d_value_lines_and_bands(ax, stats):
     return legend_elements
 
 
-def create_number_plot(plot_df, is_log_scale, stats=None, uniqueID=None, metadata=None):
+def create_number_plot(plot_df, is_log_scale, stats=None, uniqueID=None, metadata=None, 
+                      pre_calculated_fit=None):
     """Create a two-subplot plot for number-weighted distribution."""
     
     scale_name = "Logarithmic" if is_log_scale else "Linear"
@@ -172,8 +210,9 @@ def create_number_plot(plot_df, is_log_scale, stats=None, uniqueID=None, metadat
         ax1.scatter(plot_df['size_nm'], plot_df['number_normalized_avg'], 
                    color=color, s=60, alpha=0.8, label='Number Distribution')
     
-    # Add lognormal fit curve
-    fit_result = add_number_fit_curve_fixed(ax1, plot_df, is_log_scale)
+    # Add lognormal fit curve using pre-calculated fit
+    fit_result = add_number_fit_curve_fixed(ax1, plot_df, is_log_scale, 
+                                            pre_calculated_fit=pre_calculated_fit)
     if isinstance(fit_result, tuple):
         fit_legend_elements, fit_results = fit_result
     else:
@@ -313,7 +352,25 @@ def generate_number_plots(distribution_df, stats_dict=None, uniqueID=None,
     
     created_files = []
     
-    # Generate linear and logarithmic plots
+    # CALCULATE FIT ONCE USING LOG SCALE DATA
+    print("Calculating lognormal fit from log-scale data...")
+    log_df = distribution_df[distribution_df['scale'] == 'logarithmic'].copy()
+    pre_calculated_fit = None
+    
+    if not log_df.empty:
+        sizes = log_df['size_nm'].values
+        weights = log_df['number_normalized_avg'].values
+        valid_mask = (weights > 0) & (sizes > 0)
+        
+        if np.any(valid_mask):
+            sizes_valid = sizes[valid_mask]
+            weights_valid = weights[valid_mask]
+            success, result = fit_lognormal_in_logspace(sizes_valid, weights_valid)
+            if success:
+                pre_calculated_fit = result
+                print(f"  ✓ Fit calculated successfully")
+    
+    # Generate linear and logarithmic plots using the same fit
     for is_log_scale in [False, True]:
         scale_type = 'logarithmic' if is_log_scale else 'linear'
         scale_name = 'log' if is_log_scale else 'linear'
@@ -332,8 +389,9 @@ def generate_number_plots(distribution_df, stats_dict=None, uniqueID=None,
         if stats_dict and scale_type in stats_dict and 'number' in stats_dict[scale_type]:
             stats = stats_dict[scale_type]['number']
         
-        # Create the plot
-        fig, fit_results = create_number_plot(plot_df, is_log_scale, stats, uniqueID, metadata)
+        # Create the plot - pass pre-calculated fit
+        fig, fit_results = create_number_plot(plot_df, is_log_scale, stats, uniqueID, 
+                                             metadata, pre_calculated_fit=pre_calculated_fit)
         
         if fig is None:
             print(f"  Failed to create plot")
@@ -354,20 +412,22 @@ def generate_number_plots(distribution_df, stats_dict=None, uniqueID=None,
                 else:
                     all_fits = {'dataset': uniqueID, 'fits': {}}
                 
-                # Add this fit to the collection
-                fit_key = f"number_{scale_name}"
-                all_fits['fits'][fit_key] = {
-                    'distribution_type': 'number',
-                    'scale': scale_name,
-                    'fit_type': fit_type,
-                    'parameters': fit_data
-                }
+                # Add this fit to the collection (only once, not for each scale)
+                if f"number_logspace" not in all_fits['fits']:
+                    all_fits['fits'][f"number_logspace"] = {
+                        'distribution_type': 'number',
+                        'fit_basis': 'logarithmic scale data',
+                        'fit_type': fit_type,
+                        'parameters': fit_data,
+                        'displayed_on': ['linear', 'logarithmic']
+                    }
                 
                 # Save updated fits file
                 with open(fits_path, 'w') as f:
                     json.dump(all_fits, f, indent=2, default=str)
                 
-                print(f"  ✓ Saved fit to: {fits_filename}")
+                if is_log_scale:  # Only print once
+                    print(f"  ✓ Saved fit to: {fits_filename}")
                 
             except Exception as e:
                 print(f"  ⚠ Failed to save fit: {str(e)}")
@@ -619,7 +679,8 @@ def fit_gaussian_mixture_direct(sizes, volumes, n_components_range=range(1, 4)):
         return False, f"GMM fitting failed: {str(e)}"
 
 
-def add_volume_fit_curve_fixed(ax, plot_df, is_log_scale, fit_color='#F25C54'):
+def add_volume_fit_curve_fixed(ax, plot_df, is_log_scale, fit_color='#2C7F7F', 
+                               pre_calculated_fit=None):
     """Add lognormal fits for volume distributions (both linear and log scale)."""
     fit_legend_elements = []
     
@@ -631,26 +692,46 @@ def add_volume_fit_curve_fixed(ax, plot_df, is_log_scale, fit_color='#F25C54'):
     if not np.any(valid_mask):
         return fit_legend_elements, None
     
-    sizes, volumes = sizes[valid_mask], volumes[valid_mask]
+    sizes_valid = sizes[valid_mask]
+    volumes_valid = volumes[valid_mask]
     
-    # Use lognormal fit for both linear and log scales
-    success, result = fit_lognormal_distribution(sizes, volumes)
-    if success:
-        size_range, fitted_curve, params = result
-        ax.plot(size_range, fitted_curve, '-', color=fit_color, linewidth=2.5, 
-               alpha=0.9, label='Lognormal Fit', zorder=4)
-        
-        geometric_mean = np.exp(params[0])
-        geometric_std = np.exp(params[1])
-        fit_legend_elements.append(
-            Line2D([0], [0], color=fit_color, linestyle='-', linewidth=2.5,
-                  label=f'Lognormal: geo_mean={geometric_mean:.1f} nm, geo_std={geometric_std:.2f}')
-        )
-        
-        return fit_legend_elements, ('lognormal', {'mu': params[0], 'sigma': params[1], 'amplitude': params[2]})
+    # Use pre-calculated fit if available, otherwise calculate new one
+    if pre_calculated_fit is not None:
+        size_range_lin, size_range_log, fitted_curve_lin, fitted_curve_log, params = pre_calculated_fit
     else:
-        print(f"    Lognormal fit failed: {result}")
-        return fit_legend_elements, None
+        success, result = fit_lognormal_in_logspace(sizes_valid, volumes_valid)
+        if not success:
+            return fit_legend_elements, None
+        size_range_lin, size_range_log, fitted_curve_lin, fitted_curve_log, params = result
+    
+    # Choose which fit curve to display based on scale
+    if is_log_scale:
+        size_range = size_range_log
+        fitted_curve = fitted_curve_log
+    else:
+        size_range = size_range_lin
+        fitted_curve = fitted_curve_lin
+    
+    # Plot the fit curve
+    ax.plot(size_range, fitted_curve, '-', color=fit_color, linewidth=2.5, 
+           alpha=0.9, label='Lognormal Fit', zorder=4)
+    
+    # Calculate geometric statistics
+    geometric_mean = np.exp(params[0])
+    geometric_std = np.exp(params[1])
+    
+    fit_legend_elements.append(
+        Line2D([0], [0], color=fit_color, linestyle='-', linewidth=2.5,
+              label=f'Lognormal: μ={geometric_mean:.1f} nm, σ={geometric_std:.2f}')
+    )
+    
+    return fit_legend_elements, ('lognormal', {
+        'mu': params[0], 
+        'sigma': params[1], 
+        'amplitude': params[2],
+        'geo_mean': geometric_mean, 
+        'geo_std': geometric_std
+    })
 
 
 def add_d_value_lines_and_bands(ax, stats):
@@ -700,7 +781,8 @@ def add_d_value_lines_and_bands(ax, stats):
     return legend_elements
 
 
-def create_volume_plot(plot_df, is_log_scale, stats=None, uniqueID=None, metadata=None):
+def create_volume_plot(plot_df, is_log_scale, stats=None, uniqueID=None, metadata=None,
+                      pre_calculated_fit=None):
     """Create a two-subplot plot for volume-weighted distribution."""
     
     scale_name = "Logarithmic" if is_log_scale else "Linear"
@@ -729,8 +811,9 @@ def create_volume_plot(plot_df, is_log_scale, stats=None, uniqueID=None, metadat
         ax1.scatter(plot_df['size_nm'], plot_df['volume_nm^3_per_mL_avg'], 
                    color=color, s=60, alpha=0.8, label='Volume Distribution')
     
-    # Add fit curve and get fit results
-    fit_result = add_volume_fit_curve_fixed(ax1, plot_df, is_log_scale)
+    # Add fit curve and get fit results (pass pre-calculated fit)
+    fit_result = add_volume_fit_curve_fixed(ax1, plot_df, is_log_scale, 
+                                            pre_calculated_fit=pre_calculated_fit)
     if isinstance(fit_result, tuple):
         fit_legend_elements, fit_results = fit_result
     else:
@@ -885,7 +968,25 @@ def generate_volume_plots(distribution_df, stats_dict=None, uniqueID=None,
     
     created_files = []
     
-    # Generate linear and logarithmic plots
+    # CALCULATE FIT ONCE USING LOG SCALE DATA
+    print("Calculating lognormal fit for volume from log-scale data...")
+    log_df = distribution_df[distribution_df['scale'] == 'logarithmic'].copy()
+    pre_calculated_fit = None
+    
+    if not log_df.empty:
+        sizes = log_df['size_nm'].values
+        weights = log_df['volume_nm^3_per_mL_avg'].values
+        valid_mask = (weights > 0) & (sizes > 0)
+        
+        if np.any(valid_mask):
+            sizes_valid = sizes[valid_mask]
+            weights_valid = weights[valid_mask]
+            success, result = fit_lognormal_in_logspace(sizes_valid, weights_valid)
+            if success:
+                pre_calculated_fit = result
+                print(f"  ✓ Fit calculated successfully")
+    
+    # Generate linear and logarithmic plots using the same fit
     for is_log_scale in [False, True]:
         scale_type = 'logarithmic' if is_log_scale else 'linear'
         scale_name = 'log' if is_log_scale else 'linear'
@@ -904,8 +1005,9 @@ def generate_volume_plots(distribution_df, stats_dict=None, uniqueID=None,
         if stats_dict and scale_type in stats_dict and 'volume' in stats_dict[scale_type]:
             stats = stats_dict[scale_type]['volume']
         
-        # Create the plot
-        fig, fit_results = create_volume_plot(plot_df, is_log_scale, stats, uniqueID, metadata)
+        # Create the plot - pass pre-calculated fit
+        fig, fit_results = create_volume_plot(plot_df, is_log_scale, stats, uniqueID, 
+                                             metadata, pre_calculated_fit=pre_calculated_fit)
         
         if fig is None:
             print(f"  Failed to create plot")
@@ -926,20 +1028,22 @@ def generate_volume_plots(distribution_df, stats_dict=None, uniqueID=None,
                 else:
                     all_fits = {'dataset': uniqueID, 'fits': {}}
                 
-                # Add this fit to the collection
-                fit_key = f"volume_{scale_name}"
-                all_fits['fits'][fit_key] = {
-                    'distribution_type': 'volume',
-                    'scale': scale_name,
-                    'fit_type': fit_type,
-                    'parameters': fit_data
-                }
+                # Add this fit to the collection (only once, not for each scale)
+                if f"volume_logspace" not in all_fits['fits']:
+                    all_fits['fits'][f"volume_logspace"] = {
+                        'distribution_type': 'volume',
+                        'fit_basis': 'logarithmic scale data',
+                        'fit_type': fit_type,
+                        'parameters': fit_data,
+                        'displayed_on': ['linear', 'logarithmic']
+                    }
                 
                 # Save updated fits file
                 with open(fits_path, 'w') as f:
                     json.dump(all_fits, f, indent=2, default=str)
                 
-                print(f"  ✓ Saved fit to: {fits_filename}")
+                if is_log_scale:  # Only print once
+                    print(f"  ✓ Saved fit to: {fits_filename}")
                 
             except Exception as e:
                 print(f"  ⚠ Failed to save fit: {str(e)}")
@@ -1042,7 +1146,8 @@ def fit_lognormal_distribution(sizes, weights):
         return False, f"Lognormal fit failed: {str(e)}"
 
 
-def add_surface_area_fit_curve(ax, plot_df, is_log_scale, fit_color='#F25C54'):
+def add_surface_area_fit_curve(ax, plot_df, is_log_scale, fit_color='#C45B5B',
+                               pre_calculated_fit=None):
     """Add lognormal fits for surface area distributions (both linear and log scale)."""
     fit_legend_elements = []
     
@@ -1054,28 +1159,47 @@ def add_surface_area_fit_curve(ax, plot_df, is_log_scale, fit_color='#F25C54'):
     if not np.any(valid_mask):
         return fit_legend_elements, None
     
-    sizes, surface_areas = sizes[valid_mask], surface_areas[valid_mask]
+    sizes_valid = sizes[valid_mask]
+    surface_areas_valid = surface_areas[valid_mask]
     
-    # Use lognormal fit for both linear and log scales
-    success, result = fit_lognormal_distribution(sizes, surface_areas)
-    if success:
-        size_range, fitted_curve, params = result
-        ax.plot(size_range, fitted_curve, '-', color=fit_color, linewidth=2.5, 
-               alpha=0.9, label='Lognormal Fit', zorder=4)
-        
-        geometric_mean = np.exp(params[0])
-        geometric_std = np.exp(params[1])
-        
-        # Add fit info to legend (consistent for both scales)
-        fit_legend_elements.append(
-            Line2D([0], [0], color=fit_color, linestyle='-', linewidth=2.5,
-                  label=f'Lognormal: geo_mean={geometric_mean:.1f} nm, geo_std={geometric_std:.2f}')
-        )
-        
-        return fit_legend_elements, ('lognormal', {'mu': params[0], 'sigma': params[1], 'amplitude': params[2]})
+    # Use pre-calculated fit if available, otherwise calculate new one
+    if pre_calculated_fit is not None:
+        size_range_lin, size_range_log, fitted_curve_lin, fitted_curve_log, params = pre_calculated_fit
     else:
-        print(f"    Lognormal fit failed: {result}")
-        return fit_legend_elements, None
+        success, result = fit_lognormal_in_logspace(sizes_valid, surface_areas_valid)
+        if not success:
+            return fit_legend_elements, None
+        size_range_lin, size_range_log, fitted_curve_lin, fitted_curve_log, params = result
+    
+    # Choose which fit curve to display based on scale
+    if is_log_scale:
+        size_range = size_range_log
+        fitted_curve = fitted_curve_log
+    else:
+        size_range = size_range_lin
+        fitted_curve = fitted_curve_lin
+    
+    # Plot the fit curve
+    ax.plot(size_range, fitted_curve, '-', color=fit_color, linewidth=2.5, 
+           alpha=0.9, label='Lognormal Fit', zorder=4)
+    
+    # Calculate geometric statistics
+    geometric_mean = np.exp(params[0])
+    geometric_std = np.exp(params[1])
+    
+    # Add fit info to legend (consistent for both scales)
+    fit_legend_elements.append(
+        Line2D([0], [0], color=fit_color, linestyle='-', linewidth=2.5,
+              label=f'Lognormal: μ={geometric_mean:.1f} nm, σ={geometric_std:.2f}')
+    )
+    
+    return fit_legend_elements, ('lognormal', {
+        'mu': params[0], 
+        'sigma': params[1], 
+        'amplitude': params[2],
+        'geo_mean': geometric_mean, 
+        'geo_std': geometric_std
+    })
 
 
 def add_d_value_lines_and_bands(ax, stats):
@@ -1125,7 +1249,8 @@ def add_d_value_lines_and_bands(ax, stats):
     return legend_elements
 
 
-def create_surface_area_plot(plot_df, is_log_scale, stats=None, uniqueID=None, metadata=None):
+def create_surface_area_plot(plot_df, is_log_scale, stats=None, uniqueID=None, metadata=None,
+                            pre_calculated_fit=None):
     """Create a two-subplot plot for surface area-weighted distribution."""
     
     scale_name = "Logarithmic" if is_log_scale else "Linear"
@@ -1156,8 +1281,9 @@ def create_surface_area_plot(plot_df, is_log_scale, stats=None, uniqueID=None, m
         ax1.scatter(plot_df['size_nm'], plot_df['area_nm^2_per_mL_avg'], 
                    color=color, s=60, alpha=0.8, label='Surface Area Distribution')
     
-    # Add lognormal fit curve
-    fit_result = add_surface_area_fit_curve(ax1, plot_df, is_log_scale)
+    # Add lognormal fit curve (pass pre-calculated fit)
+    fit_result = add_surface_area_fit_curve(ax1, plot_df, is_log_scale,
+                                           pre_calculated_fit=pre_calculated_fit)
     if isinstance(fit_result, tuple):
         fit_legend_elements, fit_results = fit_result
     else:
@@ -1327,7 +1453,25 @@ def generate_surface_area_plots(distribution_df, stats_dict=None, uniqueID=None,
     
     created_files = []
     
-    # Generate linear and logarithmic plots
+    # CALCULATE FIT ONCE USING LOG SCALE DATA
+    print("Calculating lognormal fit for surface area from log-scale data...")
+    log_df = distribution_df[distribution_df['scale'] == 'logarithmic'].copy()
+    pre_calculated_fit = None
+    
+    if not log_df.empty:
+        sizes = log_df['size_nm'].values
+        weights = log_df['area_nm^2_per_mL_avg'].values
+        valid_mask = (weights > 0) & (sizes > 0)
+        
+        if np.any(valid_mask):
+            sizes_valid = sizes[valid_mask]
+            weights_valid = weights[valid_mask]
+            success, result = fit_lognormal_in_logspace(sizes_valid, weights_valid)
+            if success:
+                pre_calculated_fit = result
+                print(f"  ✓ Fit calculated successfully")
+    
+    # Generate linear and logarithmic plots using the same fit
     for is_log_scale in [False, True]:
         scale_type = 'logarithmic' if is_log_scale else 'linear'
         scale_name = 'log' if is_log_scale else 'linear'
@@ -1346,8 +1490,9 @@ def generate_surface_area_plots(distribution_df, stats_dict=None, uniqueID=None,
         if stats_dict and scale_type in stats_dict and 'surface_area' in stats_dict[scale_type]:
             stats = stats_dict[scale_type]['surface_area']
         
-        # Create the plot
-        fig, fit_results = create_surface_area_plot(plot_df, is_log_scale, stats, uniqueID, metadata)
+        # Create the plot - pass pre-calculated fit
+        fig, fit_results = create_surface_area_plot(plot_df, is_log_scale, stats, uniqueID, 
+                                                   metadata, pre_calculated_fit=pre_calculated_fit)
         
         if fig is None:
             print(f"  Failed to create plot")
@@ -1368,20 +1513,22 @@ def generate_surface_area_plots(distribution_df, stats_dict=None, uniqueID=None,
                 else:
                     all_fits = {'dataset': uniqueID, 'fits': {}}
                 
-                # Add this fit to the collection
-                fit_key = f"surface_area_{scale_name}"
-                all_fits['fits'][fit_key] = {
-                    'distribution_type': 'surface_area',
-                    'scale': scale_name,
-                    'fit_type': fit_type,
-                    'parameters': fit_data
-                }
+                # Add this fit to the collection (only once, not for each scale)
+                if f"surface_area_logspace" not in all_fits['fits']:
+                    all_fits['fits'][f"surface_area_logspace"] = {
+                        'distribution_type': 'surface_area',
+                        'fit_basis': 'logarithmic scale data',
+                        'fit_type': fit_type,
+                        'parameters': fit_data,
+                        'displayed_on': ['linear', 'logarithmic']
+                    }
                 
                 # Save updated fits file
                 with open(fits_path, 'w') as f:
                     json.dump(all_fits, f, indent=2, default=str)
                 
-                print(f"  ✓ Saved fit to: {fits_filename}")
+                if is_log_scale:  # Only print once
+                    print(f"  ✓ Saved fit to: {fits_filename}")
                 
             except Exception as e:
                 print(f"  ⚠ Failed to save fit: {str(e)}")

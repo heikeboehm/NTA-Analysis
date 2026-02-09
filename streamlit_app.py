@@ -357,13 +357,11 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                                 st.session_state.plot_output_dir = output_dir
                                 st.session_state.generated_plots = []
                                 
-                                # Define all 5 plotting functions
+                                # Define all 3 plotting functions
                                 plot_functions = [
                                     ('number', nta_plots.generate_number_plots, "Number-Weighted"),
                                     ('volume', nta_plots.generate_volume_plots, "Volume-Weighted"),
                                     ('surface_area', nta_plots.generate_surface_area_plots, "Surface Area-Weighted"),
-                                    ('count_vs_volume', nta_plots.generate_count_vs_volume_plots, "Counts vs Volume"),
-                                    ('count_vs_surface_area', nta_plots.generate_count_vs_surface_area_plots, "Counts vs Surface Area"),
                                 ]
                                 
                                 for plot_key, plot_func, plot_label in plot_functions:
@@ -580,8 +578,6 @@ if st.session_state.analysis_complete:
                 'number': ('📊 Number-Weighted Distribution', ['linear', 'logarithmic']),
                 'volume': ('📊 Volume-Weighted Distribution', ['linear', 'logarithmic']),
                 'surface_area': ('📊 Surface Area-Weighted Distribution', ['linear', 'logarithmic']),
-                'count_vs_volume': ('📊 Raw Counts vs Theoretical Volume', ['linear', 'logarithmic']),
-                'count_vs_surface_area': ('📊 Raw Counts vs Theoretical Surface Area', ['linear', 'logarithmic']),
             }
             
             # Create columns for selection
@@ -608,19 +604,10 @@ if st.session_state.analysis_complete:
                     # For plots with multiple scales, find all PNG files for this plot type
                     if plot_key == 'number':
                         search_pattern = '*number*.png'
-                        plot_name = 'Number'
                     elif plot_key == 'volume':
                         search_pattern = '*volume*.png'
-                        plot_name = 'Volume'
                     elif plot_key == 'surface_area':
                         search_pattern = '*surface*.png'
-                        plot_name = 'Surface Area'
-                    elif plot_key == 'count_vs_volume':
-                        search_pattern = '*volume_theo*.png'
-                        plot_name = 'Volume Theoretical'
-                    elif plot_key == 'count_vs_surface_area':
-                        search_pattern = '*surface_theo*.png'
-                        plot_name = 'Surface Area Theoretical'
                     else:
                         continue
                     
