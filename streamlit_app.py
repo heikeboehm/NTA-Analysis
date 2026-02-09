@@ -702,137 +702,138 @@ if st.session_state.analysis_complete:
         has_plots = st.session_state.plot_output_dir is not None and \
                     len(st.session_state.generated_plots) > 0
         
+        # File Summary Section
+        st.subheader("📥 Download Your Results")
+        
         if has_plots and DOWNLOAD_MANAGER_AVAILABLE:
-            # Show summary of available files
-            from pathlib import Path
-            output_path = Path(st.session_state.plot_output_dir)
-            
             # Count files
-            pdf_files = list(output_path.glob('*Plot_*.pdf'))
-            png_files = list(output_path.glob('*Plot_*.png'))
-            fit_files = list(output_path.glob('*Fits_*.json'))
-            
-            col_summary1, col_summary2, col_summary3, col_summary4 = st.columns(4)
-            with col_summary1:
-                st.metric("📊 Data Files", 3)  # distribution, metadata, stats
-            with col_summary2:
-                st.metric("📈 Plot PDFs", len(pdf_files))
-            with col_summary3:
-                st.metric("🖼 Plot PNGs", len(png_files))
-            with col_summary4:
-                st.metric("📋 Fit Data", len(fit_files))
-            
-            st.markdown("---")
-        
-        # Data Files Section
-        st.subheader("📊 Analysis Data")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            dist_df = st.session_state.distribution_data
-            tsv_data = dist_df.to_csv(sep='\t', index=False)
-            st.download_button(
-                label="📥 Distribution Data",
-                data=tsv_data,
-                file_name=f"Data_{unique_id}_avg{num_replicates}_distribution.txt",
-                mime="text/plain",
-                key="dist_txt"
-            )
-        
-        with col2:
-            if st.session_state.metadata:
-                metadata_df = pd.DataFrame(
-                    [(k, v) for k, v in st.session_state.metadata.items()],
-                    columns=['Field', 'Value']
-                )
-                tsv_data = metadata_df.to_csv(sep='\t', index=False)
-                st.download_button(
-                    label="📥 Metadata",
-                    data=tsv_data,
-                    file_name=f"Data_{unique_id}_avg{num_replicates}_metadata.txt",
-                    mime="text/plain",
-                    key="meta_txt"
-                )
-        
-        with col3:
-            if st.session_state.statistics and isinstance(st.session_state.statistics, dict):
-                stats_list = []
-                stats = st.session_state.statistics
-                
-                try:
-                    for scale in stats:
-                        if isinstance(stats[scale], dict):
-                            for dist_type in stats[scale]:
-                                stat_dict = stats[scale][dist_type]
-                                row = {
-                                    'Scale': scale,
-                                    'Distribution': dist_type,
-                                    **stat_dict
-                                }
-                                stats_list.append(row)
-                    
-                    if stats_list:
-                        stats_df = pd.DataFrame(stats_list)
-                        tsv_data = stats_df.to_csv(sep='\t', index=False)
-                        st.download_button(
-                            label="📥 Statistics",
-                            data=tsv_data,
-                            file_name=f"Data_{unique_id}_avg{num_replicates}_statistics.txt",
-                            mime="text/plain",
-                            key="stats_txt"
-                        )
-                except Exception as e:
-                    st.warning(f"Could not format statistics: {str(e)}")
-        
-        # Plot Files Section
-        if has_plots:
-            st.markdown("---")
-            st.subheader("📊 Generated Plots")
-            
             from pathlib import Path
             output_path = Path(st.session_state.plot_output_dir)
+            pdf_files = list(output_path.glob('*Plot_*.pdf'))
+            fit_files = list(output_path.glob('FitData_*.txt'))
+            
+            # Quick metrics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("📊 Data Files", 3, "CSV + 2 TSV")
+            with col2:
+                st.metric("📈 Plots (PDF)", len(pdf_files), "300 DPI")
+            with col3:
+                st.metric("🔬 Fit Data", len(fit_files), "TSV files")
+            with col4:
+                st.metric("📦 Complete ZIP", 1, "All files")
+            
+            st.markdown("---")
+            
+            # Section 1: Data Files
+            st.subheader("1️⃣ Analysis Data Files")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                dist_df = st.session_state.distribution_data
+                tsv_data = dist_df.to_csv(sep='\t', index=False)
+                st.download_button(
+                    label="📥 Distribution Data",
+                    data=tsv_data,
+                    file_name=f"Data_{unique_id}_avg{num_replicates}_distribution.txt",
+                    mime="text/plain",
+                    key="dist_txt",
+                    use_container_width=True
+                )
+                st.caption("Size bins + measurements")
+            
+            with col2:
+                if st.session_state.metadata:
+                    metadata_df = pd.DataFrame(
+                        [(k, v) for k, v in st.session_state.metadata.items()],
+                        columns=['Field', 'Value']
+                    )
+                    tsv_data = metadata_df.to_csv(sep='\t', index=False)
+                    st.download_button(
+                        label="📥 Metadata",
+                        data=tsv_data,
+                        file_name=f"Data_{unique_id}_avg{num_replicates}_metadata.txt",
+                        mime="text/plain",
+                        key="meta_txt",
+                        use_container_width=True
+                    )
+                    st.caption("Experimental parameters")
+            
+            with col3:
+                if st.session_state.statistics and isinstance(st.session_state.statistics, dict):
+                    stats_list = []
+                    stats = st.session_state.statistics
+                    
+                    try:
+                        for scale in stats:
+                            if isinstance(stats[scale], dict):
+                                for dist_type in stats[scale]:
+                                    stat_dict = stats[scale][dist_type]
+                                    row = {
+                                        'Scale': scale,
+                                        'Distribution': dist_type,
+                                        **stat_dict
+                                    }
+                                    stats_list.append(row)
+                        
+                        if stats_list:
+                            stats_df = pd.DataFrame(stats_list)
+                            tsv_data = stats_df.to_csv(sep='\t', index=False)
+                            st.download_button(
+                                label="📥 Statistics",
+                                data=tsv_data,
+                                file_name=f"Data_{unique_id}_avg{num_replicates}_statistics.txt",
+                                mime="text/plain",
+                                key="stats_txt",
+                                use_container_width=True
+                            )
+                            st.caption("D50, D90, Span, etc.")
+                    except Exception as e:
+                        st.warning(f"Could not format statistics: {str(e)}")
+            
+            st.markdown("---")
+            
+            # Section 2: Plot PDFs
+            st.subheader("2️⃣ Publication-Quality Plots")
             
             pdf_files = sorted(output_path.glob('*Plot_*.pdf'))
             
             if pdf_files:
-                st.markdown(f"**{len(pdf_files)} Plot PDFs** (300 DPI, publication quality)")
-                
-                # Create grid of download buttons
+                st.caption(f"High-resolution plots (300 DPI) ready for publications")
                 cols = st.columns(min(3, len(pdf_files)))
                 for idx, pdf_file in enumerate(pdf_files):
                     with cols[idx % 3]:
                         with open(pdf_file, 'rb') as f:
                             pdf_data = f.read()
-                        # Extract plot type from filename
                         plot_type = pdf_file.stem.split('_')[-1]
+                        plot_label = plot_type.replace('_', ' ').title()
                         st.download_button(
-                            label=f"📥 {plot_type.replace('_', ' ').title()}",
+                            label=f"📥 {plot_label}",
                             data=pdf_data,
                             file_name=pdf_file.name,
                             mime="application/pdf",
-                            key=f"plot_pdf_{pdf_file.stem}"
+                            key=f"plot_pdf_{pdf_file.stem}",
+                            use_container_width=True
                         )
             
-            # Fit Data Section
             st.markdown("---")
-            st.subheader("📈 Fit Data (Distribution + Parameters)")
-            st.markdown("For each plot type, download just the data and lognormal fit parameters needed to re-plot elsewhere")
             
-            # Create fit data for each generated plot type
+            # Section 3: Fit Data
+            st.subheader("3️⃣ Fit Data (for Re-plotting)")
+            
             dist_df = st.session_state.distribution_data
             stats = st.session_state.statistics
             
-            # Fit data available for the 3 main distribution types
             plot_fit_configs = [
-                ('number', 'linear', '📊 Number Distribution'),
-                ('volume', 'linear', '📊 Volume Distribution'),
-                ('surface_area', 'linear', '📊 Surface Area Distribution'),
+                ('number', 'linear', 'Number'),
+                ('volume', 'linear', 'Volume'),
+                ('surface_area', 'linear', 'Surface Area'),
             ]
             
-            # Show available fit data with better organization
             fit_available = [cfg for cfg in plot_fit_configs if cfg[0] in st.session_state.generated_plots]
             
             if fit_available:
+                st.caption("Measured values + lognormal fit parameters for easy re-plotting")
                 cols_fit = st.columns(min(3, len(fit_available)))
                 for idx, (dist_type, scale, label) in enumerate(fit_available):
                     with cols_fit[idx % 3]:
@@ -846,59 +847,48 @@ if st.session_state.analysis_complete:
                                     data=fit_tsv,
                                     file_name=f"FitData_{unique_id}_avg{num_replicates}_{dist_type}_{scale}.txt",
                                     mime="text/plain",
-                                    key=f"fit_{dist_type}_{scale}"
+                                    key=f"fit_{dist_type}_{scale}",
+                                    use_container_width=True
                                 )
                         except Exception as e:
                             st.warning(f"Could not create fit data: {str(e)}")
-            else:
-                st.info("Fit data will be available after generating plots")
-        
-        # ZIP Download Section
-        st.markdown("---")
-        st.subheader("📦 Complete Package")
-        
-        if has_plots and DOWNLOAD_MANAGER_AVAILABLE:
-            col_zip1, col_zip2 = st.columns([3, 1])
             
-            with col_zip1:
-                st.markdown(f"""
-                **Download everything as a single ZIP file:**
-                - ✅ Distribution data (CSV)
-                - ✅ Metadata (TSV)
-                - ✅ Statistics (TSV)
-                - ✅ All generated plots (PDFs only, no PNGs)
-                - ✅ All fit data (TSV with lognormal parameters)
-                """)
+            st.markdown("---")
             
-            with col_zip2:
-                try:
-                    zip_bytes = nta_download_manager.create_download_zip(
-                        st.session_state.plot_output_dir,
-                        unique_id,
-                        num_replicates,
-                        metadata_dict=st.session_state.metadata,
-                        distribution_df=st.session_state.distribution_data,
-                        statistics_dict=st.session_state.statistics
-                    )
-                    
-                    if zip_bytes:
-                        st.download_button(
-                            label="📦 Download ZIP",
-                            data=zip_bytes,
-                            file_name=f"Data_{unique_id}_avg{num_replicates}_complete.zip",
-                            mime="application/zip",
-                            key="complete_zip",
-                            use_container_width=True
-                        )
-                except Exception as e:
-                    st.warning(f"Could not create ZIP: {str(e)}")
-        else:
-            st.markdown("""
-            **Generate plots to enable ZIP download:**
-            - Go to the **📊 Plots** tab
-            - Select plots and click "🎨 Generate Selected Plots"
-            - Then return here to download PDFs and fit data
+            # Section 4: Complete Package
+            st.subheader("4️⃣ Complete Package (ZIP)")
+            
+            st.info("""
+            🎁 **One-click download of everything:**
+            - All analysis data (distribution, metadata, statistics)
+            - All plots in one place (PDFs only)
+            - All fit data for each distribution
+            - Organized folders: `data/`, `plots/`, `fit_data/`
             """)
+            
+            try:
+                zip_bytes = nta_download_manager.create_download_zip(
+                    st.session_state.plot_output_dir,
+                    unique_id,
+                    num_replicates,
+                    metadata_dict=st.session_state.metadata,
+                    distribution_df=st.session_state.distribution_data,
+                    statistics_dict=st.session_state.statistics
+                )
+                
+                if zip_bytes:
+                    st.download_button(
+                        label="📦 Download Complete ZIP",
+                        data=zip_bytes,
+                        file_name=f"Data_{unique_id}_avg{num_replicates}_complete.zip",
+                        mime="application/zip",
+                        key="complete_zip",
+                        use_container_width=True
+                    )
+            except Exception as e:
+                st.warning(f"Could not create ZIP: {str(e)}")
+        else:
+            st.info("👆 Run analysis and generate plots first, then return here to download results")
 
 else:
     # No analysis yet
