@@ -38,6 +38,13 @@ try:
 except ImportError:
     PLOTTING_AVAILABLE = False
 
+# Import download manager
+try:
+    import nta_download_manager
+    DOWNLOAD_MANAGER_AVAILABLE = True
+except ImportError:
+    DOWNLOAD_MANAGER_AVAILABLE = False
+
 # ============================================================================
 # PAGE CONFIG & STYLING
 # ============================================================================
@@ -131,6 +138,10 @@ def initialize_session_state():
         st.session_state.statistics = None
     if 'uploaded_files' not in st.session_state:
         st.session_state.uploaded_files = None
+    if 'plot_output_dir' not in st.session_state:
+        st.session_state.plot_output_dir = None
+    if 'generated_plots' not in st.session_state:
+        st.session_state.generated_plots = []
 
 initialize_session_state()
 
@@ -547,174 +558,176 @@ if st.session_state.analysis_complete:
                 metadata = st.session_state.metadata
                 stats = st.session_state.statistics
                 
+                # Create persistent output directory
+                import tempfile
+                output_dir = tempfile.mkdtemp(prefix='nta_plots_')
+                st.session_state.plot_output_dir = output_dir
+                st.session_state.generated_plots = []
+                
                 try:
-                    import tempfile
+                    # Number-weighted distribution
+                    if plot_number:
+                        with st.expander("📊 Number-Weighted Distribution", expanded=True):
+                            try:
+                                success, result = nta_plots.generate_number_plots(
+                                    dist_df, 
+                                    stats_dict=stats,
+                                    uniqueID=metadata.get('persistentID', 'NTA_sample'),
+                                    metadata=metadata,
+                                    output_dir=output_dir,
+                                    config=None
+                                )
+                                if success:
+                                    st.success("✅ Number distribution plot generated")
+                                    st.session_state.generated_plots.append('number')
+                                    # Show generated files
+                                    from pathlib import Path
+                                    plot_files = list(Path(output_dir).glob('*number*.png'))
+                                    if plot_files:
+                                        from PIL import Image
+                                        for plot_file in sorted(plot_files):
+                                            img = Image.open(plot_file)
+                                            st.image(img, use_column_width=True)
+                                else:
+                                    st.warning(f"Could not generate number distribution: {result}")
+                            except Exception as e:
+                                st.warning(f"Error: {str(e)[:200]}")
                     
-                    # Create temporary directory for plots
-                    with tempfile.TemporaryDirectory() as temp_dir:
-                        # Number-weighted distribution
-                        if plot_number:
-                            with st.expander("📊 Number-Weighted Distribution", expanded=True):
-                                try:
-                                    success, result = nta_plots.generate_number_plots(
-                                        dist_df, 
-                                        stats_dict=stats,
-                                        uniqueID=metadata.get('persistentID', 'NTA_sample'),
-                                        metadata=metadata,
-                                        output_dir=temp_dir,
-                                        config=None
-                                    )
-                                    if success:
-                                        st.success("✅ Number distribution plot generated")
-                                        # Try to display the saved plot
-                                        import os
-                                        from pathlib import Path
-                                        plot_files = list(Path(temp_dir).glob('*number*.png'))
-                                        if plot_files:
-                                            from PIL import Image
-                                            for plot_file in sorted(plot_files)[:2]:  # Show up to 2 plots
-                                                img = Image.open(plot_file)
-                                                st.image(img, use_column_width=True)
-                                    else:
-                                        st.warning(f"Could not generate number distribution: {result}")
-                                except Exception as e:
-                                    st.warning(f"Error: {str(e)[:200]}")
-                        
-                        # Volume-weighted distribution
-                        if plot_volume:
-                            with st.expander("📊 Volume-Weighted Distribution"):
-                                try:
-                                    success, result = nta_plots.generate_volume_plots(
-                                        dist_df,
-                                        stats_dict=stats,
-                                        uniqueID=metadata.get('persistentID', 'NTA_sample'),
-                                        metadata=metadata,
-                                        output_dir=temp_dir,
-                                        config=None
-                                    )
-                                    if success:
-                                        st.success("✅ Volume distribution plot generated")
-                                        import os
-                                        from pathlib import Path
-                                        plot_files = list(Path(temp_dir).glob('*volume*.png'))
-                                        if plot_files:
-                                            from PIL import Image
-                                            for plot_file in sorted(plot_files)[:2]:
-                                                img = Image.open(plot_file)
-                                                st.image(img, use_column_width=True)
-                                    else:
-                                        st.warning(f"Could not generate volume distribution: {result}")
-                                except Exception as e:
-                                    st.warning(f"Error: {str(e)[:200]}")
-                        
-                        # Surface area-weighted distribution
-                        if plot_surface:
-                            with st.expander("📊 Surface Area-Weighted Distribution"):
-                                try:
-                                    success, result = nta_plots.generate_surface_area_plots(
-                                        dist_df,
-                                        stats_dict=stats,
-                                        uniqueID=metadata.get('persistentID', 'NTA_sample'),
-                                        metadata=metadata,
-                                        output_dir=temp_dir,
-                                        config=None
-                                    )
-                                    if success:
-                                        st.success("✅ Surface area distribution plot generated")
-                                        import os
-                                        from pathlib import Path
-                                        plot_files = list(Path(temp_dir).glob('*surface*.png'))
-                                        if plot_files:
-                                            from PIL import Image
-                                            for plot_file in sorted(plot_files)[:2]:
-                                                img = Image.open(plot_file)
-                                                st.image(img, use_column_width=True)
-                                    else:
-                                        st.warning(f"Could not generate surface area distribution: {result}")
-                                except Exception as e:
-                                    st.warning(f"Error: {str(e)[:200]}")
-                        
-                        # Raw particle counts
-                        if plot_raw:
-                            with st.expander("📊 Raw Particle Counts"):
-                                try:
-                                    success, result = nta_plots.generate_raw_particle_plots(
-                                        dist_df,
-                                        uniqueID=metadata.get('persistentID', 'NTA_sample'),
-                                        metadata=metadata,
-                                        output_dir=temp_dir,
-                                        config=None
-                                    )
-                                    if success:
-                                        st.success("✅ Raw particle plot generated")
-                                        import os
-                                        from pathlib import Path
-                                        plot_files = list(Path(temp_dir).glob('*raw*.png'))
-                                        if plot_files:
-                                            from PIL import Image
-                                            for plot_file in sorted(plot_files):
-                                                img = Image.open(plot_file)
-                                                st.image(img, use_column_width=True)
-                                    else:
-                                        st.warning(f"Could not generate raw particle plot: {result}")
-                                except Exception as e:
-                                    st.warning(f"Error: {str(e)[:200]}")
-                        
-                        # Raw counts vs volume
-                        if plot_vol_theo:
-                            with st.expander("📊 Raw Counts vs Theoretical Volume"):
-                                try:
-                                    success, result = nta_plots.generate_volume_theoretical_plots(
-                                        dist_df,
-                                        stats_dict=stats,
-                                        uniqueID=metadata.get('persistentID', 'NTA_sample'),
-                                        metadata=metadata,
-                                        output_dir=temp_dir,
-                                        config=None
-                                    )
-                                    if success:
-                                        st.success("✅ Volume theoretical plot generated")
-                                        import os
-                                        from pathlib import Path
-                                        plot_files = list(Path(temp_dir).glob('*volume_theo*.png'))
-                                        if plot_files:
-                                            from PIL import Image
-                                            for plot_file in sorted(plot_files)[:2]:
-                                                img = Image.open(plot_file)
-                                                st.image(img, use_column_width=True)
-                                    else:
-                                        st.warning(f"Could not generate volume theoretical plot: {result}")
-                                except Exception as e:
-                                    st.warning(f"Error: {str(e)[:200]}")
-                        
-                        # Raw counts vs surface area
-                        if plot_surf_theo:
-                            with st.expander("📊 Raw Counts vs Theoretical Surface Area"):
-                                try:
-                                    success, result = nta_plots.generate_surface_area_theoretical_plots(
-                                        dist_df,
-                                        stats_dict=stats,
-                                        uniqueID=metadata.get('persistentID', 'NTA_sample'),
-                                        metadata=metadata,
-                                        output_dir=temp_dir,
-                                        config=None
-                                    )
-                                    if success:
-                                        st.success("✅ Surface area theoretical plot generated")
-                                        import os
-                                        from pathlib import Path
-                                        plot_files = list(Path(temp_dir).glob('*surface_theo*.png'))
-                                        if plot_files:
-                                            from PIL import Image
-                                            for plot_file in sorted(plot_files)[:2]:
-                                                img = Image.open(plot_file)
-                                                st.image(img, use_column_width=True)
-                                    else:
-                                        st.warning(f"Could not generate surface area theoretical plot: {result}")
-                                except Exception as e:
-                                    st.warning(f"Error: {str(e)[:200]}")
+                    # Volume-weighted distribution
+                    if plot_volume:
+                        with st.expander("📊 Volume-Weighted Distribution"):
+                            try:
+                                success, result = nta_plots.generate_volume_plots(
+                                    dist_df,
+                                    stats_dict=stats,
+                                    uniqueID=metadata.get('persistentID', 'NTA_sample'),
+                                    metadata=metadata,
+                                    output_dir=output_dir,
+                                    config=None
+                                )
+                                if success:
+                                    st.success("✅ Volume distribution plot generated")
+                                    st.session_state.generated_plots.append('volume')
+                                    from pathlib import Path
+                                    plot_files = list(Path(output_dir).glob('*volume*.png'))
+                                    if plot_files:
+                                        from PIL import Image
+                                        for plot_file in sorted(plot_files):
+                                            img = Image.open(plot_file)
+                                            st.image(img, use_column_width=True)
+                                else:
+                                    st.warning(f"Could not generate volume distribution: {result}")
+                            except Exception as e:
+                                st.warning(f"Error: {str(e)[:200]}")
                     
-                    st.success("✅ All selected plots generated successfully!")
+                    # Surface area-weighted distribution
+                    if plot_surface:
+                        with st.expander("📊 Surface Area-Weighted Distribution"):
+                            try:
+                                success, result = nta_plots.generate_surface_area_plots(
+                                    dist_df,
+                                    stats_dict=stats,
+                                    uniqueID=metadata.get('persistentID', 'NTA_sample'),
+                                    metadata=metadata,
+                                    output_dir=output_dir,
+                                    config=None
+                                )
+                                if success:
+                                    st.success("✅ Surface area distribution plot generated")
+                                    st.session_state.generated_plots.append('surface_area')
+                                    from pathlib import Path
+                                    plot_files = list(Path(output_dir).glob('*surface*.png'))
+                                    if plot_files:
+                                        from PIL import Image
+                                        for plot_file in sorted(plot_files):
+                                            img = Image.open(plot_file)
+                                            st.image(img, use_column_width=True)
+                                else:
+                                    st.warning(f"Could not generate surface area distribution: {result}")
+                            except Exception as e:
+                                st.warning(f"Error: {str(e)[:200]}")
+                    
+                    # Raw particle counts
+                    if plot_raw:
+                        with st.expander("📊 Raw Particle Counts"):
+                            try:
+                                success, result = nta_plots.generate_raw_particle_plots(
+                                    dist_df,
+                                    uniqueID=metadata.get('persistentID', 'NTA_sample'),
+                                    metadata=metadata,
+                                    output_dir=output_dir,
+                                    config=None
+                                )
+                                if success:
+                                    st.success("✅ Raw particle plot generated")
+                                    st.session_state.generated_plots.append('raw')
+                                    from pathlib import Path
+                                    plot_files = list(Path(output_dir).glob('*raw*.png'))
+                                    if plot_files:
+                                        from PIL import Image
+                                        for plot_file in sorted(plot_files):
+                                            img = Image.open(plot_file)
+                                            st.image(img, use_column_width=True)
+                                else:
+                                    st.warning(f"Could not generate raw particle plot: {result}")
+                            except Exception as e:
+                                st.warning(f"Error: {str(e)[:200]}")
+                    
+                    # Raw counts vs volume
+                    if plot_vol_theo:
+                        with st.expander("📊 Raw Counts vs Theoretical Volume"):
+                            try:
+                                success, result = nta_plots.generate_volume_theoretical_plots(
+                                    dist_df,
+                                    stats_dict=stats,
+                                    uniqueID=metadata.get('persistentID', 'NTA_sample'),
+                                    metadata=metadata,
+                                    output_dir=output_dir,
+                                    config=None
+                                )
+                                if success:
+                                    st.success("✅ Volume theoretical plot generated")
+                                    st.session_state.generated_plots.append('volume_theoretical')
+                                    from pathlib import Path
+                                    plot_files = list(Path(output_dir).glob('*volume_theo*.png'))
+                                    if plot_files:
+                                        from PIL import Image
+                                        for plot_file in sorted(plot_files):
+                                            img = Image.open(plot_file)
+                                            st.image(img, use_column_width=True)
+                                else:
+                                    st.warning(f"Could not generate volume theoretical plot: {result}")
+                            except Exception as e:
+                                st.warning(f"Error: {str(e)[:200]}")
+                    
+                    # Raw counts vs surface area
+                    if plot_surf_theo:
+                        with st.expander("📊 Raw Counts vs Theoretical Surface Area"):
+                            try:
+                                success, result = nta_plots.generate_surface_area_theoretical_plots(
+                                    dist_df,
+                                    stats_dict=stats,
+                                    uniqueID=metadata.get('persistentID', 'NTA_sample'),
+                                    metadata=metadata,
+                                    output_dir=output_dir,
+                                    config=None
+                                )
+                                if success:
+                                    st.success("✅ Surface area theoretical plot generated")
+                                    st.session_state.generated_plots.append('surface_area_theoretical')
+                                    from pathlib import Path
+                                    plot_files = list(Path(output_dir).glob('*surface_theo*.png'))
+                                    if plot_files:
+                                        from PIL import Image
+                                        for plot_file in sorted(plot_files):
+                                            img = Image.open(plot_file)
+                                            st.image(img, use_column_width=True)
+                                else:
+                                    st.warning(f"Could not generate surface area theoretical plot: {result}")
+                            except Exception as e:
+                                st.warning(f"Error: {str(e)[:200]}")
+                    
+                    st.success("✅ All selected plots generated successfully! Check the Download tab for PDF files.")
                 
                 except Exception as e:
                     st.error(f"❌ Error generating plots: {str(e)}")
@@ -723,35 +736,60 @@ if st.session_state.analysis_complete:
     with tab_download:
         st.subheader("📥 Download Analysis Results")
         
-        st.markdown("Export your complete analysis results:")
-        st.info("📝 All files are exported as tab-separated TXT format for easy import into Excel or other programs")
+        st.markdown("Export your complete analysis results - data, plots, fit parameters, and everything as ZIP:")
+        st.info("📝 All files are exported as tab-separated TXT format for easy import into Excel or other programs\n📊 Plots saved as PDF (300 DPI) and PNG\n📈 Fit data includes distribution data and lognormal fit parameters")
 
         # Get unique ID for file naming
         persistent_id = st.session_state.metadata.get('persistentID', 'NTA_analysis')
         # Extract shorter unique ID (remove _00XX_avg3 suffix)
-        # e.g., "CBP_LEAF_5455892_2_20250710_NTA_size_0010_avg3" -> "CBP_LEAF_5455892_2_20250710_NTA_size"
         import re
         unique_id = re.sub(r'_\d{4}_avg\d+$', '', persistent_id)
         
         # Get number of replicates
         num_replicates = st.session_state.metadata.get('num_replicates', 1)
 
+        # Check if plots have been generated
+        has_plots = st.session_state.plot_output_dir is not None and \
+                    len(st.session_state.generated_plots) > 0
         
-        col1, col2 = st.columns(2)
+        if has_plots and DOWNLOAD_MANAGER_AVAILABLE:
+            # Show summary of available files
+            from pathlib import Path
+            output_path = Path(st.session_state.plot_output_dir)
+            
+            # Count files
+            pdf_files = list(output_path.glob('*Plot_*.pdf'))
+            png_files = list(output_path.glob('*Plot_*.png'))
+            fit_files = list(output_path.glob('*Fits_*.json'))
+            
+            col_summary1, col_summary2, col_summary3, col_summary4 = st.columns(4)
+            with col_summary1:
+                st.metric("📊 Data Files", 3)  # distribution, metadata, stats
+            with col_summary2:
+                st.metric("📈 Plot PDFs", len(pdf_files))
+            with col_summary3:
+                st.metric("🖼 Plot PNGs", len(png_files))
+            with col_summary4:
+                st.metric("📋 Fit Data", len(fit_files))
+            
+            st.markdown("---")
+        
+        # Data Files Section
+        st.subheader("📊 Analysis Data")
+        col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.subheader("📊 Data")
-            
             dist_df = st.session_state.distribution_data
             tsv_data = dist_df.to_csv(sep='\t', index=False)
             st.download_button(
-                label="📥 Distribution Data (TXT)",
+                label="📥 Distribution Data",
                 data=tsv_data,
                 file_name=f"Data_{unique_id}_avg{num_replicates}_distribution.txt",
                 mime="text/plain",
                 key="dist_txt"
             )
-            
+        
+        with col2:
             if st.session_state.metadata:
                 metadata_df = pd.DataFrame(
                     [(k, v) for k, v in st.session_state.metadata.items()],
@@ -759,17 +797,14 @@ if st.session_state.analysis_complete:
                 )
                 tsv_data = metadata_df.to_csv(sep='\t', index=False)
                 st.download_button(
-                    label="📥 Metadata (TXT)",
+                    label="📥 Metadata",
                     data=tsv_data,
                     file_name=f"Data_{unique_id}_avg{num_replicates}_metadata.txt",
                     mime="text/plain",
                     key="meta_txt"
                 )
-                
         
-        with col2:
-            st.subheader("📉 Statistics")
-            
+        with col3:
             if st.session_state.statistics and isinstance(st.session_state.statistics, dict):
                 stats_list = []
                 stats = st.session_state.statistics
@@ -790,18 +825,119 @@ if st.session_state.analysis_complete:
                         stats_df = pd.DataFrame(stats_list)
                         tsv_data = stats_df.to_csv(sep='\t', index=False)
                         st.download_button(
-                            label="📥 Statistics (TXT)",
+                            label="📥 Statistics",
                             data=tsv_data,
                             file_name=f"Data_{unique_id}_avg{num_replicates}_statistics.txt",
                             mime="text/plain",
                             key="stats_txt"
                         )
-                    else:
-                        st.info("No statistics data to export")
                 except Exception as e:
-                    st.warning(f"Could not format statistics for download: {str(e)}")
-            else:
-                st.info("Statistics not yet calculated")
+                    st.warning(f"Could not format statistics: {str(e)}")
+        
+        # Plot Files Section
+        if has_plots:
+            st.markdown("---")
+            st.subheader("📊 Generated Plots")
+            
+            from pathlib import Path
+            output_path = Path(st.session_state.plot_output_dir)
+            
+            pdf_files = sorted(output_path.glob('*Plot_*.pdf'))
+            
+            if pdf_files:
+                st.markdown(f"**{len(pdf_files)} Plot PDFs** (300 DPI, publication quality)")
+                
+                # Create grid of download buttons
+                cols = st.columns(min(3, len(pdf_files)))
+                for idx, pdf_file in enumerate(pdf_files):
+                    with cols[idx % 3]:
+                        with open(pdf_file, 'rb') as f:
+                            pdf_data = f.read()
+                        # Extract plot type from filename
+                        plot_type = pdf_file.stem.split('_')[-1]
+                        st.download_button(
+                            label=f"📥 {plot_type.replace('_', ' ').title()}",
+                            data=pdf_data,
+                            file_name=pdf_file.name,
+                            mime="application/pdf",
+                            key=f"plot_pdf_{pdf_file.stem}"
+                        )
+            
+            # Fit Data Section
+            st.markdown("---")
+            st.subheader("📈 Fit Data (Distribution + Parameters)")
+            st.markdown("For each plot, get the distribution data and lognormal fit parameters to plot elsewhere")
+            
+            # Create fit data for each generated plot type
+            dist_df = st.session_state.distribution_data
+            stats = st.session_state.statistics
+            
+            plot_fit_configs = [
+                ('number', 'linear', 'Number Distribution (Linear)'),
+                ('volume', 'linear', 'Volume Distribution (Linear)'),
+                ('surface_area', 'linear', 'Surface Area Distribution (Linear)'),
+            ]
+            
+            cols_fit = st.columns(3)
+            for idx, (dist_type, scale, label) in enumerate(plot_fit_configs):
+                if dist_type in st.session_state.generated_plots:
+                    with cols_fit[idx % 3]:
+                        try:
+                            fit_tsv = nta_download_manager.export_fit_data_tsv(
+                                dist_df, stats, scale, dist_type
+                            )
+                            if fit_tsv:
+                                st.download_button(
+                                    label=f"📥 {label}",
+                                    data=fit_tsv,
+                                    file_name=f"FitData_{unique_id}_avg{num_replicates}_{dist_type}_{scale}.txt",
+                                    mime="text/plain",
+                                    key=f"fit_{dist_type}_{scale}"
+                                )
+                        except Exception as e:
+                            st.warning(f"Could not create fit data: {str(e)}")
+        
+        # ZIP Download Section
+        st.markdown("---")
+        st.subheader("📦 Complete Package")
+        
+        if has_plots and DOWNLOAD_MANAGER_AVAILABLE:
+            col_zip1, col_zip2 = st.columns([3, 1])
+            
+            with col_zip1:
+                st.markdown(f"""
+                **Download everything as a single ZIP file:**
+                - ✅ All data files (distribution, metadata, statistics)
+                - ✅ All generated plots (PDFs + PNGs)
+                - ✅ All fit data (TSV with parameters)
+                """)
+            
+            with col_zip2:
+                try:
+                    zip_bytes = nta_download_manager.create_download_zip(
+                        st.session_state.plot_output_dir,
+                        unique_id,
+                        num_replicates
+                    )
+                    
+                    if zip_bytes:
+                        st.download_button(
+                            label="📦 Download ZIP",
+                            data=zip_bytes,
+                            file_name=f"Data_{unique_id}_avg{num_replicates}_complete.zip",
+                            mime="application/zip",
+                            key="complete_zip",
+                            use_container_width=True
+                        )
+                except Exception as e:
+                    st.warning(f"Could not create ZIP: {str(e)}")
+        else:
+            st.markdown("""
+            **Generate plots to enable ZIP download:**
+            - Go to the **📊 Plots** tab
+            - Select plots and click "🎨 Generate Selected Plots"
+            - Then return here to download PDFs and fit data
+            """)
 
 else:
     # No analysis yet
@@ -813,5 +949,7 @@ else:
     2. **Enter metadata** - Customize experimenter, project, and sample information
     3. **Run analysis** - Click the 'RUN ANALYSIS' button to process your data
     4. **View results** - Check the Summary, Distributions, and Statistics tabs
-    5. **Download** - Export your results as tab-separated TXT files (compatible with Excel)
+    5. **Generate plots** - Go to the Plots tab to create visualizations
+    6. **Download** - Export results as TSV data files, PDF plots, and fit parameters
+    7. **Package** - Download everything as ZIP
     """)
