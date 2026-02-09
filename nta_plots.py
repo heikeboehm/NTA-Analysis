@@ -1,7 +1,11 @@
 # ============================================================================
-# NTA PLOTTING FUNCTIONS - Extracted from Jupyter Notebook
+# NTA PLOTTING FUNCTIONS - ORIGINAL CODE FROM JUPYTER NOTEBOOK
+# ============================================================================
+# This is the ACTUAL plotting code that generates publication-quality plots
+# with lognormal fits, error bars, D-value lines, and confidence intervals
 # ============================================================================
 
+import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -12,9 +16,10 @@ from scipy import stats as scipy_stats
 from scipy.optimize import curve_fit
 
 
-# ============================================================================
-# PLOTTING FUNCTION SET 1 (from Jupyter Cell 9)
-# ============================================================================
+
+# ======================================================================
+# CELL 9
+# ======================================================================
 
 
 
@@ -424,9 +429,10 @@ if 'current_distribution_df' in globals() and current_distribution_df is not Non
 else:
     print("No data found. Run the complete workflow first.")
 
-# ============================================================================
-# PLOTTING FUNCTION SET 2 (from Jupyter Cell 10)
-# ============================================================================
+
+# ======================================================================
+# CELL 10
+# ======================================================================
 
 
 
@@ -995,9 +1001,10 @@ if 'current_distribution_df' in globals() and current_distribution_df is not Non
 else:
     print("No data found. Run the complete workflow first.")
 
-# ============================================================================
-# PLOTTING FUNCTION SET 3 (from Jupyter Cell 11)
-# ============================================================================
+
+# ======================================================================
+# CELL 11
+# ======================================================================
 
 
 
@@ -1436,9 +1443,10 @@ if 'current_distribution_df' in globals() and current_distribution_df is not Non
 else:
     print("No data found. Run the complete workflow first.")
 
-# ============================================================================
-# PLOTTING FUNCTION SET 4 (from Jupyter Cell 12)
-# ============================================================================
+
+# ======================================================================
+# CELL 12
+# ======================================================================
 
 
 
@@ -1735,9 +1743,10 @@ if 'current_distribution_df' in globals() and current_distribution_df is not Non
 else:
     print("No data found. Run the complete workflow first.")
 
-# ============================================================================
-# PLOTTING FUNCTION SET 5 (from Jupyter Cell 13)
-# ============================================================================
+
+# ======================================================================
+# CELL 13
+# ======================================================================
 
 
 
@@ -2287,9 +2296,10 @@ if 'current_distribution_df' in globals() and current_distribution_df is not Non
 else:
     print("No data found. Run the complete workflow first.")
 
-# ============================================================================
-# PLOTTING FUNCTION SET 6 (from Jupyter Cell 14)
-# ============================================================================
+
+# ======================================================================
+# CELL 14
+# ======================================================================
 
 
 
@@ -2825,391 +2835,3 @@ if 'current_distribution_df' in globals() and current_distribution_df is not Non
 
 else:
     print("No data found. Run the complete workflow first.")
-
-# ============================================================================
-# STREAMLIT WRAPPER FUNCTIONS
-# ============================================================================
-
-def create_number_distribution_figure(distribution_df, metadata=None):
-    """Create number-weighted distribution plot for Streamlit."""
-    fig = plt.figure(figsize=(14, 8))
-    gs = gridspec.GridSpec(2, 2, figure=fig, height_ratios=[0.6, 0.4], hspace=0.3, wspace=0.3)
-    
-    try:
-        # Linear scale
-        ax1 = fig.add_subplot(gs[0, 0])
-        linear_data = distribution_df[distribution_df['scale'] == 'linear'].sort_values('size_nm')
-        if not linear_data.empty and 'number_normalized_avg' in linear_data.columns:
-            sizes = linear_data['size_nm'].values
-            values = linear_data['number_normalized_avg'].values
-            errors = linear_data.get('number_normalized_sd', pd.Series([0]*len(sizes))).values
-            
-            ax1.bar(sizes, values, color='#1f77b4', alpha=0.7, edgecolor='black', linewidth=0.5)
-            if np.any(errors > 0):
-                ax1.errorbar(sizes, values, yerr=errors, fmt='none', ecolor='black', alpha=0.3)
-            ax1.set_xlabel('Size (nm)', fontsize=11)
-            ax1.set_ylabel('Normalized Count', fontsize=11)
-            ax1.set_title('Number Distribution (Linear Scale)', fontsize=12, fontweight='bold')
-            ax1.grid(axis='y', alpha=0.3)
-        
-        # Logarithmic scale
-        ax2 = fig.add_subplot(gs[0, 1])
-        log_data = distribution_df[distribution_df['scale'] == 'logarithmic'].sort_values('size_nm')
-        if not log_data.empty and 'number_normalized_avg' in log_data.columns:
-            sizes = log_data['size_nm'].values
-            values = log_data['number_normalized_avg'].values
-            errors = log_data.get('number_normalized_sd', pd.Series([0]*len(sizes))).values
-            
-            ax2.bar(sizes, values, color='#ff7f0e', alpha=0.7, edgecolor='black', linewidth=0.5)
-            if np.any(errors > 0):
-                ax2.errorbar(sizes, values, yerr=errors, fmt='none', ecolor='black', alpha=0.3)
-            ax2.set_xlabel('Size (nm)', fontsize=11)
-            ax2.set_ylabel('Normalized Count', fontsize=11)
-            ax2.set_title('Number Distribution (Log Scale)', fontsize=12, fontweight='bold')
-            ax2.set_xscale('log')
-            ax2.grid(axis='y', alpha=0.3)
-        
-        # Cumulative - Linear
-        ax3 = fig.add_subplot(gs[1, 0])
-        if 'number_normalized_cumsum_avg' in linear_data.columns:
-            ax3.plot(linear_data['size_nm'], linear_data['number_normalized_cumsum_avg'], 
-                    'o-', color='#1f77b4', linewidth=2, markersize=4)
-            ax3.set_xlabel('Size (nm)', fontsize=11)
-            ax3.set_ylabel('Cumulative Distribution', fontsize=11)
-            ax3.set_title('Cumulative (Linear)', fontsize=11)
-            ax3.grid(True, alpha=0.3)
-            ax3.set_ylim([0, 1])
-        
-        # Cumulative - Logarithmic
-        ax4 = fig.add_subplot(gs[1, 1])
-        if 'number_normalized_cumsum_avg' in log_data.columns:
-            ax4.plot(log_data['size_nm'], log_data['number_normalized_cumsum_avg'], 
-                    'o-', color='#ff7f0e', linewidth=2, markersize=4)
-            ax4.set_xlabel('Size (nm)', fontsize=11)
-            ax4.set_ylabel('Cumulative Distribution', fontsize=11)
-            ax4.set_title('Cumulative (Log)', fontsize=11)
-            ax4.set_xscale('log')
-            ax4.grid(True, alpha=0.3)
-            ax4.set_ylim([0, 1])
-        
-        plt.suptitle('Number-Weighted Distribution', fontsize=14, fontweight='bold', y=0.995)
-        return fig
-    
-    except Exception as e:
-        st.warning(f"Error creating number distribution: {str(e)}")
-        return None
-
-
-def create_volume_distribution_figure(distribution_df, metadata=None):
-    """Create volume-weighted distribution plot for Streamlit."""
-    fig = plt.figure(figsize=(14, 8))
-    gs = gridspec.GridSpec(2, 2, figure=fig, height_ratios=[0.6, 0.4], hspace=0.3, wspace=0.3)
-    
-    try:
-        # Linear scale
-        ax1 = fig.add_subplot(gs[0, 0])
-        linear_data = distribution_df[distribution_df['scale'] == 'linear'].sort_values('size_nm')
-        if not linear_data.empty and 'volume_nm^3_per_mL_avg' in linear_data.columns:
-            sizes = linear_data['size_nm'].values
-            values = linear_data['volume_nm^3_per_mL_avg'].values
-            errors = linear_data.get('volume_nm^3_per_mL_sd', pd.Series([0]*len(sizes))).values
-            
-            ax1.bar(sizes, values, color='#2ca02c', alpha=0.7, edgecolor='black', linewidth=0.5)
-            if np.any(errors > 0):
-                ax1.errorbar(sizes, values, yerr=errors, fmt='none', ecolor='black', alpha=0.3)
-            ax1.set_xlabel('Size (nm)', fontsize=11)
-            ax1.set_ylabel('Volume (nm³/mL)', fontsize=11)
-            ax1.set_title('Volume Distribution (Linear Scale)', fontsize=12, fontweight='bold')
-            ax1.grid(axis='y', alpha=0.3)
-        
-        # Logarithmic scale
-        ax2 = fig.add_subplot(gs[0, 1])
-        log_data = distribution_df[distribution_df['scale'] == 'logarithmic'].sort_values('size_nm')
-        if not log_data.empty and 'volume_nm^3_per_mL_avg' in log_data.columns:
-            sizes = log_data['size_nm'].values
-            values = log_data['volume_nm^3_per_mL_avg'].values
-            errors = log_data.get('volume_nm^3_per_mL_sd', pd.Series([0]*len(sizes))).values
-            
-            ax2.bar(sizes, values, color='#d62728', alpha=0.7, edgecolor='black', linewidth=0.5)
-            if np.any(errors > 0):
-                ax2.errorbar(sizes, values, yerr=errors, fmt='none', ecolor='black', alpha=0.3)
-            ax2.set_xlabel('Size (nm)', fontsize=11)
-            ax2.set_ylabel('Volume (nm³/mL)', fontsize=11)
-            ax2.set_title('Volume Distribution (Log Scale)', fontsize=12, fontweight='bold')
-            ax2.set_xscale('log')
-            ax2.grid(axis='y', alpha=0.3)
-        
-        # Cumulative - Linear
-        ax3 = fig.add_subplot(gs[1, 0])
-        if 'volume_nm^3_per_mL_cumsum_avg' in linear_data.columns:
-            cumsum = linear_data['volume_nm^3_per_mL_cumsum_avg'].values
-            max_val = cumsum.max()
-            if max_val > 0:
-                cumsum_norm = cumsum / max_val
-            else:
-                cumsum_norm = cumsum
-            ax3.plot(linear_data['size_nm'], cumsum_norm, 'o-', color='#2ca02c', linewidth=2, markersize=4)
-            ax3.set_xlabel('Size (nm)', fontsize=11)
-            ax3.set_ylabel('Cumulative Volume', fontsize=11)
-            ax3.set_title('Cumulative (Linear)', fontsize=11)
-            ax3.grid(True, alpha=0.3)
-        
-        # Cumulative - Logarithmic
-        ax4 = fig.add_subplot(gs[1, 1])
-        if 'volume_nm^3_per_mL_cumsum_avg' in log_data.columns:
-            cumsum = log_data['volume_nm^3_per_mL_cumsum_avg'].values
-            max_val = cumsum.max()
-            if max_val > 0:
-                cumsum_norm = cumsum / max_val
-            else:
-                cumsum_norm = cumsum
-            ax4.plot(log_data['size_nm'], cumsum_norm, 'o-', color='#d62728', linewidth=2, markersize=4)
-            ax4.set_xlabel('Size (nm)', fontsize=11)
-            ax4.set_ylabel('Cumulative Volume', fontsize=11)
-            ax4.set_title('Cumulative (Log)', fontsize=11)
-            ax4.set_xscale('log')
-            ax4.grid(True, alpha=0.3)
-        
-        plt.suptitle('Volume-Weighted Distribution', fontsize=14, fontweight='bold', y=0.995)
-        return fig
-    
-    except Exception as e:
-        st.warning(f"Error creating volume distribution: {str(e)}")
-        return None
-
-
-def create_surface_area_distribution_figure(distribution_df, metadata=None):
-    """Create surface area-weighted distribution plot for Streamlit."""
-    fig = plt.figure(figsize=(14, 8))
-    gs = gridspec.GridSpec(2, 2, figure=fig, height_ratios=[0.6, 0.4], hspace=0.3, wspace=0.3)
-    
-    try:
-        # Linear scale
-        ax1 = fig.add_subplot(gs[0, 0])
-        linear_data = distribution_df[distribution_df['scale'] == 'linear'].sort_values('size_nm')
-        if not linear_data.empty and 'area_nm^2_per_mL_avg' in linear_data.columns:
-            sizes = linear_data['size_nm'].values
-            values = linear_data['area_nm^2_per_mL_avg'].values
-            errors = linear_data.get('area_nm^2_per_mL_sd', pd.Series([0]*len(sizes))).values
-            
-            ax1.bar(sizes, values, color='#9467bd', alpha=0.7, edgecolor='black', linewidth=0.5)
-            if np.any(errors > 0):
-                ax1.errorbar(sizes, values, yerr=errors, fmt='none', ecolor='black', alpha=0.3)
-            ax1.set_xlabel('Size (nm)', fontsize=11)
-            ax1.set_ylabel('Area (nm²/mL)', fontsize=11)
-            ax1.set_title('Surface Area Distribution (Linear Scale)', fontsize=12, fontweight='bold')
-            ax1.grid(axis='y', alpha=0.3)
-        
-        # Logarithmic scale
-        ax2 = fig.add_subplot(gs[0, 1])
-        log_data = distribution_df[distribution_df['scale'] == 'logarithmic'].sort_values('size_nm')
-        if not log_data.empty and 'area_nm^2_per_mL_avg' in log_data.columns:
-            sizes = log_data['size_nm'].values
-            values = log_data['area_nm^2_per_mL_avg'].values
-            errors = log_data.get('area_nm^2_per_mL_sd', pd.Series([0]*len(sizes))).values
-            
-            ax2.bar(sizes, values, color='#8c564b', alpha=0.7, edgecolor='black', linewidth=0.5)
-            if np.any(errors > 0):
-                ax2.errorbar(sizes, values, yerr=errors, fmt='none', ecolor='black', alpha=0.3)
-            ax2.set_xlabel('Size (nm)', fontsize=11)
-            ax2.set_ylabel('Area (nm²/mL)', fontsize=11)
-            ax2.set_title('Surface Area Distribution (Log Scale)', fontsize=12, fontweight='bold')
-            ax2.set_xscale('log')
-            ax2.grid(axis='y', alpha=0.3)
-        
-        # Cumulative - Linear
-        ax3 = fig.add_subplot(gs[1, 0])
-        if 'area_nm^2_per_mL_cumsum_avg' in linear_data.columns:
-            cumsum = linear_data['area_nm^2_per_mL_cumsum_avg'].values
-            max_val = cumsum.max()
-            if max_val > 0:
-                cumsum_norm = cumsum / max_val
-            else:
-                cumsum_norm = cumsum
-            ax3.plot(linear_data['size_nm'], cumsum_norm, 'o-', color='#9467bd', linewidth=2, markersize=4)
-            ax3.set_xlabel('Size (nm)', fontsize=11)
-            ax3.set_ylabel('Cumulative Area', fontsize=11)
-            ax3.set_title('Cumulative (Linear)', fontsize=11)
-            ax3.grid(True, alpha=0.3)
-        
-        # Cumulative - Logarithmic
-        ax4 = fig.add_subplot(gs[1, 1])
-        if 'area_nm^2_per_mL_cumsum_avg' in log_data.columns:
-            cumsum = log_data['area_nm^2_per_mL_cumsum_avg'].values
-            max_val = cumsum.max()
-            if max_val > 0:
-                cumsum_norm = cumsum / max_val
-            else:
-                cumsum_norm = cumsum
-            ax4.plot(log_data['size_nm'], cumsum_norm, 'o-', color='#8c564b', linewidth=2, markersize=4)
-            ax4.set_xlabel('Size (nm)', fontsize=11)
-            ax4.set_ylabel('Cumulative Area', fontsize=11)
-            ax4.set_title('Cumulative (Log)', fontsize=11)
-            ax4.set_xscale('log')
-            ax4.grid(True, alpha=0.3)
-        
-        plt.suptitle('Surface Area-Weighted Distribution', fontsize=14, fontweight='bold', y=0.995)
-        return fig
-    
-    except Exception as e:
-        st.warning(f"Error creating surface area distribution: {str(e)}")
-        return None
-
-
-def create_raw_particle_figure(distribution_df, metadata=None):
-    """Create raw particle count plot for Streamlit."""
-    fig = plt.figure(figsize=(14, 6))
-    
-    try:
-        linear_data = distribution_df[distribution_df['scale'] == 'linear'].sort_values('size_nm')
-        if not linear_data.empty and 'number_avg' in linear_data.columns:
-            ax = fig.add_subplot(111)
-            sizes = linear_data['size_nm'].values
-            counts = linear_data['number_avg'].values
-            errors = linear_data.get('number_sd', pd.Series([0]*len(sizes))).values
-            
-            ax.bar(sizes, counts, color='#1f77b4', alpha=0.7, edgecolor='black', linewidth=0.5)
-            if np.any(errors > 0):
-                ax.errorbar(sizes, counts, yerr=errors, fmt='none', ecolor='black', capsize=3)
-            
-            ax.set_xlabel('Size (nm)', fontsize=12)
-            ax.set_ylabel('Raw Particle Count', fontsize=12)
-            ax.set_title('Raw Particle Counts vs Size', fontsize=13, fontweight='bold')
-            ax.grid(axis='y', alpha=0.3)
-        
-        plt.tight_layout()
-        return fig
-    
-    except Exception as e:
-        st.warning(f"Error creating raw particle plot: {str(e)}")
-        return None
-
-
-def create_volume_theoretical_figure(distribution_df, metadata=None):
-    """Create counts vs theoretical volume plot for Streamlit."""
-    fig = plt.figure(figsize=(14, 8))
-    gs = gridspec.GridSpec(2, 2, figure=fig, height_ratios=[0.6, 0.4], hspace=0.3, wspace=0.3)
-    
-    try:
-        # Linear scale
-        ax1 = fig.add_subplot(gs[0, 0])
-        linear_data = distribution_df[distribution_df['scale'] == 'linear'].sort_values('size_nm')
-        if not linear_data.empty and 'number_avg' in linear_data.columns:
-            sizes = linear_data['size_nm'].values
-            counts = linear_data['number_avg'].values
-            volumes = (4/3) * np.pi * (sizes/2)**3
-            
-            ax1.scatter(volumes, counts, s=50, color='#1f77b4', alpha=0.6, edgecolor='black')
-            ax1.set_xlabel('Theoretical Volume (nm³)', fontsize=11)
-            ax1.set_ylabel('Particle Count', fontsize=11)
-            ax1.set_title('Counts vs Theoretical Volume (Linear)', fontsize=12, fontweight='bold')
-            ax1.grid(True, alpha=0.3)
-        
-        # Logarithmic scale
-        ax2 = fig.add_subplot(gs[0, 1])
-        log_data = distribution_df[distribution_df['scale'] == 'logarithmic'].sort_values('size_nm')
-        if not log_data.empty and 'number_avg' in log_data.columns:
-            sizes = log_data['size_nm'].values
-            counts = log_data['number_avg'].values
-            volumes = (4/3) * np.pi * (sizes/2)**3
-            
-            ax2.scatter(volumes, counts, s=50, color='#ff7f0e', alpha=0.6, edgecolor='black')
-            ax2.set_xlabel('Theoretical Volume (nm³)', fontsize=11)
-            ax2.set_ylabel('Particle Count', fontsize=11)
-            ax2.set_title('Counts vs Theoretical Volume (Log Scale)', fontsize=12, fontweight='bold')
-            ax2.set_xscale('log')
-            ax2.set_yscale('log')
-            ax2.grid(True, alpha=0.3)
-        
-        # Linear cumulative
-        ax3 = fig.add_subplot(gs[1, 0])
-        if not linear_data.empty:
-            ax3.plot(linear_data['size_nm'], linear_data['number_avg'].cumsum(), 'o-', 
-                    color='#1f77b4', linewidth=2, markersize=4)
-            ax3.set_xlabel('Size (nm)', fontsize=11)
-            ax3.set_ylabel('Cumulative Count', fontsize=11)
-            ax3.set_title('Cumulative (Linear)', fontsize=11)
-            ax3.grid(True, alpha=0.3)
-        
-        # Log cumulative
-        ax4 = fig.add_subplot(gs[1, 1])
-        if not log_data.empty:
-            ax4.plot(log_data['size_nm'], log_data['number_avg'].cumsum(), 'o-', 
-                    color='#ff7f0e', linewidth=2, markersize=4)
-            ax4.set_xlabel('Size (nm)', fontsize=11)
-            ax4.set_ylabel('Cumulative Count', fontsize=11)
-            ax4.set_title('Cumulative (Log)', fontsize=11)
-            ax4.set_xscale('log')
-            ax4.grid(True, alpha=0.3)
-        
-        plt.suptitle('Raw Counts vs Theoretical Volume', fontsize=14, fontweight='bold', y=0.995)
-        return fig
-    
-    except Exception as e:
-        st.warning(f"Error creating volume theoretical plot: {str(e)}")
-        return None
-
-
-def create_surface_theoretical_figure(distribution_df, metadata=None):
-    """Create counts vs theoretical surface area plot for Streamlit."""
-    fig = plt.figure(figsize=(14, 8))
-    gs = gridspec.GridSpec(2, 2, figure=fig, height_ratios=[0.6, 0.4], hspace=0.3, wspace=0.3)
-    
-    try:
-        # Linear scale
-        ax1 = fig.add_subplot(gs[0, 0])
-        linear_data = distribution_df[distribution_df['scale'] == 'linear'].sort_values('size_nm')
-        if not linear_data.empty and 'number_avg' in linear_data.columns:
-            sizes = linear_data['size_nm'].values
-            counts = linear_data['number_avg'].values
-            surface_areas = 4 * np.pi * (sizes/2)**2
-            
-            ax1.scatter(surface_areas, counts, s=50, color='#2ca02c', alpha=0.6, edgecolor='black')
-            ax1.set_xlabel('Theoretical Surface Area (nm²)', fontsize=11)
-            ax1.set_ylabel('Particle Count', fontsize=11)
-            ax1.set_title('Counts vs Theoretical Surface Area (Linear)', fontsize=12, fontweight='bold')
-            ax1.grid(True, alpha=0.3)
-        
-        # Logarithmic scale
-        ax2 = fig.add_subplot(gs[0, 1])
-        log_data = distribution_df[distribution_df['scale'] == 'logarithmic'].sort_values('size_nm')
-        if not log_data.empty and 'number_avg' in log_data.columns:
-            sizes = log_data['size_nm'].values
-            counts = log_data['number_avg'].values
-            surface_areas = 4 * np.pi * (sizes/2)**2
-            
-            ax2.scatter(surface_areas, counts, s=50, color='#d62728', alpha=0.6, edgecolor='black')
-            ax2.set_xlabel('Theoretical Surface Area (nm²)', fontsize=11)
-            ax2.set_ylabel('Particle Count', fontsize=11)
-            ax2.set_title('Counts vs Theoretical Surface Area (Log Scale)', fontsize=12, fontweight='bold')
-            ax2.set_xscale('log')
-            ax2.set_yscale('log')
-            ax2.grid(True, alpha=0.3)
-        
-        # Linear cumulative
-        ax3 = fig.add_subplot(gs[1, 0])
-        if not linear_data.empty:
-            ax3.plot(linear_data['size_nm'], linear_data['number_avg'].cumsum(), 'o-', 
-                    color='#2ca02c', linewidth=2, markersize=4)
-            ax3.set_xlabel('Size (nm)', fontsize=11)
-            ax3.set_ylabel('Cumulative Count', fontsize=11)
-            ax3.set_title('Cumulative (Linear)', fontsize=11)
-            ax3.grid(True, alpha=0.3)
-        
-        # Log cumulative
-        ax4 = fig.add_subplot(gs[1, 1])
-        if not log_data.empty:
-            ax4.plot(log_data['size_nm'], log_data['number_avg'].cumsum(), 'o-', 
-                    color='#d62728', linewidth=2, markersize=4)
-            ax4.set_xlabel('Size (nm)', fontsize=11)
-            ax4.set_ylabel('Cumulative Count', fontsize=11)
-            ax4.set_title('Cumulative (Log)', fontsize=11)
-            ax4.set_xscale('log')
-            ax4.grid(True, alpha=0.3)
-        
-        plt.suptitle('Raw Counts vs Theoretical Surface Area', fontsize=14, fontweight='bold', y=0.995)
-        return fig
-    
-    except Exception as e:
-        st.warning(f"Error creating surface theoretical plot: {str(e)}")
-        return None
