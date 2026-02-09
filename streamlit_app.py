@@ -443,12 +443,12 @@ if st.session_state.analysis_complete:
                 use_container_width=True
             )
             
-            csv_data = filtered_df[display_cols].to_csv(index=False)
+            tsv_data = filtered_df[display_cols].to_csv(sep='\t', index=False)
             st.download_button(
-                label="¥ Download as CSV",
-                data=csv_data,
-                file_name=f"distribution_{scale_filter}.csv",
-                mime="text/csv"
+                label="📥 Download as TXT",
+                data=tsv_data,
+                file_name=f"distribution_{scale_filter}.txt",
+                mime="text/plain"
             )
         else:
             st.warning(f"No data available for {scale_filter} scale")
@@ -482,12 +482,12 @@ if st.session_state.analysis_complete:
                     stats_df = pd.DataFrame(stats_list)
                     st.dataframe(stats_df, use_container_width=True)
                     
-                    stats_csv = stats_df.to_csv(index=False)
+                    stats_tsv = stats_df.to_csv(sep='\t', index=False)
                     st.download_button(
-                        label="¥ Download Statistics",
-                        data=stats_csv,
-                        file_name=f"Data_{unique_id}_statistics.csv",
-                        mime="text/csv"
+                        label="📥 Download Statistics",
+                        data=stats_tsv,
+                        file_name="statistics.txt",
+                        mime="text/plain"
                     )
                 else:
                     st.info("No statistics data available")
@@ -520,13 +520,13 @@ if st.session_state.analysis_complete:
             st.subheader("📊 Data")
             
             dist_df = st.session_state.distribution_data
-            csv_data = dist_df.to_csv(index=False)
+            tsv_data = dist_df.to_csv(sep='\t', index=False)
             st.download_button(
-                label="¥ Distribution Data (CSV)",
-                data=csv_data,
-                file_name=f"Data_{unique_id}_distribution.csv",
-                mime="text/csv",
-                key="dist_csv"
+                label="📥 Distribution Data (TXT)",
+                data=tsv_data,
+                file_name=f"Data_{unique_id}_avg{num_replicates}_distribution.txt",
+                mime="text/plain",
+                key="dist_txt"
             )
             
             if st.session_state.metadata:
@@ -534,13 +534,13 @@ if st.session_state.analysis_complete:
                     [(k, v) for k, v in st.session_state.metadata.items()],
                     columns=['Field', 'Value']
                 )
-                csv_data = metadata_df.to_csv(index=False)
+                tsv_data = metadata_df.to_csv(sep='\t', index=False)
                 st.download_button(
-                    label="¥ Metadata (CSV)",
-                    data=csv_data,
-                    file_name=f"Data_{unique_id}_metadata.csv",
-                    mime="text/csv",
-                    key="meta_csv"
+                    label="📥 Metadata (TXT)",
+                    data=tsv_data,
+                    file_name=f"Data_{unique_id}_avg{num_replicates}_metadata.txt",
+                    mime="text/plain",
+                    key="meta_txt"
                 )
                 
         
@@ -565,13 +565,13 @@ if st.session_state.analysis_complete:
                     
                     if stats_list:
                         stats_df = pd.DataFrame(stats_list)
-                        csv_data = stats_df.to_csv(index=False)
+                        tsv_data = stats_df.to_csv(sep='\t', index=False)
                         st.download_button(
-                            label="¥ Statistics (CSV)",
-                            data=csv_data,
-                            file_name=f"Data_{unique_id}_statistics.csv",
-                            mime="text/csv",
-                            key="stats_csv"
+                            label="📥 Statistics (TXT)",
+                            data=tsv_data,
+                            file_name=f"Data_{unique_id}_avg{num_replicates}_statistics.txt",
+                            mime="text/plain",
+                            key="stats_txt"
                         )
                     else:
                         st.info("No statistics data to export")
