@@ -62,6 +62,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================================
+
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
+
+def metadata_to_tsv(metadata_dict):
+    """Convert metadata dictionary to tab-separated text format"""
+    lines = []
+    for key, value in metadata_dict.items():
+        lines.append(f"{key}\t{value}\t")
+    return "\n".join(lines)
+
 # SESSION STATE INITIALIZATION
 # ============================================================================
 
@@ -490,6 +502,16 @@ if st.session_state.analysis_complete:
                     file_name="metadata.csv",
                     mime="text/csv",
                     key="meta_csv"
+                )
+                
+                # Tab-separated TXT format (matching original Jupyter output)
+                txt_data = metadata_to_tsv(st.session_state.metadata)
+                st.download_button(
+                    label="Download Metadata (TXT)",
+                    data=txt_data,
+                    file_name="metadata.txt",
+                    mime="text/plain",
+                    key="meta_txt"
                 )
         
         with col2:
