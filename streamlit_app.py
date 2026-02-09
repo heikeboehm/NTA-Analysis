@@ -168,36 +168,50 @@ if uploaded_files:
 st.sidebar.markdown("---")
 
 # Metadata section
-st.sidebar.subheader("👤 User Metadata")
+st.sidebar.subheader("👤 User Metadata (Optional)")
 
-st.session_state.experimenter = st.sidebar.text_input(
-    "Experimenter Initials",
-    value=st.session_state.experimenter,
-    key="exp_input"
+# Toggle to include user metadata in analysis
+include_user_metadata = st.sidebar.checkbox(
+    "Add user metadata to analysis?",
+    value=True,
+    help="Include experimenter, project, location, and PI in the analysis metadata"
 )
 
-st.session_state.project = st.sidebar.text_input(
-    "Project Name",
-    value=st.session_state.project,
-    key="proj_input"
-)
+if include_user_metadata:
+    st.session_state.experimenter = st.sidebar.text_input(
+        "Experimenter Initials",
+        value=st.session_state.experimenter,
+        key="exp_input"
+    )
 
-st.session_state.location = st.sidebar.text_input(
-    "Lab Location",
-    value=st.session_state.location,
-    key="loc_input"
-)
+    st.session_state.project = st.sidebar.text_input(
+        "Project Name",
+        value=st.session_state.project,
+        key="proj_input"
+    )
 
-st.session_state.pi = st.sidebar.text_input(
-    "Principal Investigator",
-    value=st.session_state.pi,
-    key="pi_input"
-)
+    st.session_state.location = st.sidebar.text_input(
+        "Lab Location",
+        value=st.session_state.location,
+        key="loc_input"
+    )
+
+    st.session_state.pi = st.sidebar.text_input(
+        "Principal Investigator",
+        value=st.session_state.pi,
+        key="pi_input"
+    )
+else:
+    # If not included, clear them
+    st.session_state.experimenter = ""
+    st.session_state.project = ""
+    st.session_state.location = ""
+    st.session_state.pi = ""
 
 st.sidebar.markdown("---")
 
 # Run analysis button
-if st.sidebar.button("▶️  RUN ANALYSIS", key="run_button", type="primary", use_container_width=True):
+if st.sidebar.button("RUN ANALYSIS", key="run_button", type="primary", use_container_width=True):
     if not uploaded_files:
         st.sidebar.error("❌ Please upload at least one file")
     else:
@@ -440,11 +454,11 @@ if st.session_state.analysis_complete:
         st.markdown("---")
         st.subheader("📊 Key Metrics")
         
-        # Create three columns for the main metrics
+        # Create three columns for the main metrics (order: number, surface area, volume)
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            # Total concentration (particles/mL)
+            # Total concentration (particles/mL) - NUMBER
             if 'concentration_cm-3_per_mL_avg' in dist_df.columns:
                 linear_df = dist_df[dist_df['scale'] == 'linear']
                 total_conc = linear_df['concentration_cm-3_per_mL_avg'].sum() if not linear_df.empty else 0
@@ -453,7 +467,7 @@ if st.session_state.analysis_complete:
                 st.metric("Total Concentration", "N/A")
         
         with col2:
-            # Total surface area (nm²/mL)
+            # Total surface area (nm²/mL) - SURFACE AREA
             if 'area_nm^2_per_mL_avg' in dist_df.columns:
                 linear_df = dist_df[dist_df['scale'] == 'linear']
                 total_area = linear_df['area_nm^2_per_mL_avg'].sum() if not linear_df.empty else 0
@@ -462,7 +476,7 @@ if st.session_state.analysis_complete:
                 st.metric("Total Surface Area", "N/A")
         
         with col3:
-            # Total volume (nm³/mL)
+            # Total volume (nm³/mL) - VOLUME
             if 'volume_nm^3_per_mL_avg' in dist_df.columns:
                 linear_df = dist_df[dist_df['scale'] == 'linear']
                 total_vol = linear_df['volume_nm^3_per_mL_avg'].sum() if not linear_df.empty else 0
@@ -473,7 +487,7 @@ if st.session_state.analysis_complete:
         st.markdown("---")
         st.subheader("📈 Percentile Statistics")
         
-        # Display D50 and Span for each distribution type
+        # Display D50 and Span for each distribution type (order: number, surface area, volume)
         if st.session_state.statistics:
             stats = st.session_state.statistics
             
@@ -491,25 +505,25 @@ if st.session_state.analysis_complete:
                 else:
                     st.write("No statistics available")
             
-            # Volume distribution
-            with col2:
-                st.markdown("**Volume Distribution**")
-                if 'linear' in stats and 'volume' in stats['linear']:
-                    vol_stats = stats['linear']['volume']
-                    d50 = vol_stats.get('D50_avg', 'N/A')
-                    span = vol_stats.get('span_avg', 'N/A')
-                    st.write(f"D50: {d50:.2f} nm" if isinstance(d50, (int, float)) else f"D50: {d50}")
-                    st.write(f"Span: {span:.3f}" if isinstance(span, (int, float)) else f"Span: {span}")
-                else:
-                    st.write("No statistics available")
-            
             # Surface area distribution
-            with col3:
+            with col2:
                 st.markdown("**Surface Area Distribution**")
                 if 'linear' in stats and 'surface_area' in stats['linear']:
                     surf_stats = stats['linear']['surface_area']
                     d50 = surf_stats.get('D50_avg', 'N/A')
                     span = surf_stats.get('span_avg', 'N/A')
+                    st.write(f"D50: {d50:.2f} nm" if isinstance(d50, (int, float)) else f"D50: {d50}")
+                    st.write(f"Span: {span:.3f}" if isinstance(span, (int, float)) else f"Span: {span}")
+                else:
+                    st.write("No statistics available")
+            
+            # Volume distribution
+            with col3:
+                st.markdown("**Volume Distribution**")
+                if 'linear' in stats and 'volume' in stats['linear']:
+                    vol_stats = stats['linear']['volume']
+                    d50 = vol_stats.get('D50_avg', 'N/A')
+                    span = vol_stats.get('span_avg', 'N/A')
                     st.write(f"D50: {d50:.2f} nm" if isinstance(d50, (int, float)) else f"D50: {d50}")
                     st.write(f"Span: {span:.3f}" if isinstance(span, (int, float)) else f"Span: {span}")
                 else:
@@ -715,7 +729,7 @@ if st.session_state.analysis_complete:
             # Quick metrics
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("📊 Data Files", 3, "CSV + 2 TSV")
+                st.metric("📊 Data Files", 2, "Distribution + Metadata")
             with col2:
                 st.metric("📈 Plots (PDF)", len(pdf_files), "300 DPI")
             with col3:
@@ -727,7 +741,7 @@ if st.session_state.analysis_complete:
             
             # Section 1: Data Files
             st.subheader("1️⃣ Analysis Data Files")
-            col1, col2, col3 = st.columns(3)
+            col1, col2 = st.columns(2)
             
             with col1:
                 dist_df = st.session_state.distribution_data
@@ -735,7 +749,7 @@ if st.session_state.analysis_complete:
                 st.download_button(
                     label="📥 Distribution Data",
                     data=tsv_data,
-                    file_name=f"Data_{unique_id}_avg{num_replicates}_distribution.txt",
+                    file_name=f"Data_{unique_id}_avg{num_replicates}_PSD.txt",
                     mime="text/plain",
                     key="dist_txt",
                     use_container_width=True
@@ -744,8 +758,28 @@ if st.session_state.analysis_complete:
             
             with col2:
                 if st.session_state.metadata:
+                    # Create metadata with unique ID and statistics
+                    metadata_dict = dict(st.session_state.metadata)
+                    
+                    # Add unique ID to metadata
+                    metadata_dict['Unique_ID'] = unique_id
+                    
+                    # Add statistics to metadata as JSON in brackets
+                    if st.session_state.statistics:
+                        try:
+                            stats_summary = {}
+                            for scale in st.session_state.statistics:
+                                if isinstance(st.session_state.statistics[scale], dict):
+                                    for dist_type in st.session_state.statistics[scale]:
+                                        stat_dict = st.session_state.statistics[scale][dist_type]
+                                        key = f"statistics_{scale}_{dist_type}"
+                                        stats_summary[key] = stat_dict
+                            metadata_dict['Statistics'] = str(stats_summary)
+                        except Exception as e:
+                            pass
+                    
                     metadata_df = pd.DataFrame(
-                        [(k, v) for k, v in st.session_state.metadata.items()],
+                        [(k, v) for k, v in metadata_dict.items()],
                         columns=['Field', 'Value']
                     )
                     tsv_data = metadata_df.to_csv(sep='\t', index=False)
@@ -757,39 +791,7 @@ if st.session_state.analysis_complete:
                         key="meta_txt",
                         use_container_width=True
                     )
-                    st.caption("Experimental parameters")
-            
-            with col3:
-                if st.session_state.statistics and isinstance(st.session_state.statistics, dict):
-                    stats_list = []
-                    stats = st.session_state.statistics
-                    
-                    try:
-                        for scale in stats:
-                            if isinstance(stats[scale], dict):
-                                for dist_type in stats[scale]:
-                                    stat_dict = stats[scale][dist_type]
-                                    row = {
-                                        'Scale': scale,
-                                        'Distribution': dist_type,
-                                        **stat_dict
-                                    }
-                                    stats_list.append(row)
-                        
-                        if stats_list:
-                            stats_df = pd.DataFrame(stats_list)
-                            tsv_data = stats_df.to_csv(sep='\t', index=False)
-                            st.download_button(
-                                label="📥 Statistics",
-                                data=tsv_data,
-                                file_name=f"Data_{unique_id}_avg{num_replicates}_statistics.txt",
-                                mime="text/plain",
-                                key="stats_txt",
-                                use_container_width=True
-                            )
-                            st.caption("D50, D90, Span, etc.")
-                    except Exception as e:
-                        st.warning(f"Could not format statistics: {str(e)}")
+                    st.caption("Experimental parameters + statistics")
             
             st.markdown("---")
             

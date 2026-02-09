@@ -142,9 +142,8 @@ def create_download_zip(output_dir, unique_id, num_replicates, metadata_dict=Non
     Create a ZIP file with all analysis results.
     
     Includes:
-    - Distribution data (CSV)
-    - Metadata (TSV)
-    - Statistics (TSV)
+    - Distribution data (PSD.txt - TSV format)
+    - Metadata (TSV) with unique ID and statistics
     - Fit data (TSV)
     - Plot PDFs (skips PNGs)
     
@@ -156,56 +155,49 @@ def create_download_zip(output_dir, unique_id, num_replicates, metadata_dict=Non
         output_path = Path(output_dir)
         
         # Add data files section
-        # 1. Distribution data
+        # 1. Distribution data (as PSD.txt in TSV format)
         if distribution_df is not None:
             try:
-                dist_csv = distribution_df.to_csv(index=False)
+                dist_tsv = distribution_df.to_csv(sep='\t', index=False)
                 zip_file.writestr(
-                    f"data/distribution_{unique_id}_avg{num_replicates}.csv",
-                    dist_csv
+                    f"data/Data_{unique_id}_avg{num_replicates}_PSD.txt",
+                    dist_tsv
                 )
             except Exception as e:
                 print(f"  ⚠ Could not add distribution data: {str(e)}")
         
-        # 2. Metadata
+        # 2. Metadata (with unique ID and integrated statistics)
         if metadata_dict is not None:
             try:
+                # Create metadata with unique ID
+                metadata_with_id = dict(metadata_dict)
+                metadata_with_id['Unique_ID'] = unique_id
+                
+                # Integrate statistics into metadata
+                if statistics_dict is not None:
+                    try:
+                        stats_summary = {}
+                        for scale in statistics_dict:
+                            if isinstance(statistics_dict[scale], dict):
+                                for dist_type in statistics_dict[scale]:
+                                    stat_dict = statistics_dict[scale][dist_type]
+                                    key = f"statistics_{scale}_{dist_type}"
+                                    stats_summary[key] = stat_dict
+                        metadata_with_id['Statistics'] = str(stats_summary)
+                    except Exception as e:
+                        pass
+                
                 metadata_df = pd.DataFrame(
-                    [(k, v) for k, v in metadata_dict.items()],
+                    [(k, v) for k, v in metadata_with_id.items()],
                     columns=['Field', 'Value']
                 )
                 metadata_tsv = metadata_df.to_csv(sep='\t', index=False)
                 zip_file.writestr(
-                    f"data/metadata_{unique_id}_avg{num_replicates}.txt",
+                    f"data/Data_{unique_id}_avg{num_replicates}_metadata.txt",
                     metadata_tsv
                 )
             except Exception as e:
                 print(f"  ⚠ Could not add metadata: {str(e)}")
-        
-        # 3. Statistics
-        if statistics_dict is not None:
-            try:
-                stats_list = []
-                for scale in statistics_dict:
-                    if isinstance(statistics_dict[scale], dict):
-                        for dist_type in statistics_dict[scale]:
-                            stat_dict = statistics_dict[scale][dist_type]
-                            row = {
-                                'Scale': scale,
-                                'Distribution': dist_type,
-                                **stat_dict
-                            }
-                            stats_list.append(row)
-                
-                if stats_list:
-                    stats_df = pd.DataFrame(stats_list)
-                    stats_tsv = stats_df.to_csv(sep='\t', index=False)
-                    zip_file.writestr(
-                        f"data/statistics_{unique_id}_avg{num_replicates}.txt",
-                        stats_tsv
-                    )
-            except Exception as e:
-                print(f"  ⚠ Could not add statistics: {str(e)}")
         
         # Add plot PDFs (skip PNGs)
         if output_path.exists():
