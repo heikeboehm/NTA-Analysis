@@ -454,32 +454,6 @@ def lognormal_pdf(x, mu, sigma, amplitude):
     return amplitude * (1 / (x * sigma * np.sqrt(2 * np.pi))) * np.exp(-(np.log(x) - mu)**2 / (2 * sigma**2))
 
 
-def fit_lognormal_distribution(sizes, weights):
-    """Fit a lognormal distribution to size distribution data."""
-    try:
-        # Initial parameter estimates
-        size_log = np.log(sizes)
-        initial_mu = np.average(size_log, weights=weights)
-        initial_sigma = np.sqrt(np.average((size_log - initial_mu)**2, weights=weights))
-        initial_amplitude = np.max(weights) * initial_sigma * np.sqrt(2 * np.pi) * np.exp(initial_mu)
-        
-        initial_params = [initial_mu, initial_sigma, initial_amplitude]
-        
-        # Perform curve fitting
-        params, _ = curve_fit(
-            lognormal_pdf, sizes, weights, p0=initial_params,
-            bounds=([0, 0, 0], [np.inf, np.inf, np.inf]), maxfev=10000
-        )
-        
-        # Generate fitted curve
-        size_range = np.linspace(sizes.min(), sizes.max(), 200)
-        fitted_curve = lognormal_pdf(size_range, *params)
-        
-        return True, (size_range, fitted_curve, params)
-        
-    except Exception as e:
-        return False, f"Lognormal fit failed: {str(e)}"
-
 
 def fit_gaussian_mixture_direct(sizes, volumes, n_components_range=range(1, 4)):
     """
@@ -1038,32 +1012,6 @@ def lognormal_pdf(x, mu, sigma, amplitude):
     """Calculate lognormal probability density function."""
     return amplitude * (1 / (x * sigma * np.sqrt(2 * np.pi))) * np.exp(-(np.log(x) - mu)**2 / (2 * sigma**2))
 
-
-def fit_lognormal_distribution(sizes, weights):
-    """Fit a lognormal distribution to size distribution data."""
-    try:
-        # Initial parameter estimates
-        size_log = np.log(sizes)
-        initial_mu = np.average(size_log, weights=weights)
-        initial_sigma = np.sqrt(np.average((size_log - initial_mu)**2, weights=weights))
-        initial_amplitude = np.max(weights) * initial_sigma * np.sqrt(2 * np.pi) * np.exp(initial_mu)
-        
-        initial_params = [initial_mu, initial_sigma, initial_amplitude]
-        
-        # Perform curve fitting
-        params, _ = curve_fit(
-            lognormal_pdf, sizes, weights, p0=initial_params,
-            bounds=([0, 0, 0], [np.inf, np.inf, np.inf]), maxfev=10000
-        )
-        
-        # Generate fitted curve
-        size_range = np.linspace(sizes.min(), sizes.max(), 200)
-        fitted_curve = lognormal_pdf(size_range, *params)
-        
-        return True, (size_range, fitted_curve, params)
-        
-    except Exception as e:
-        return False, f"Lognormal fit failed: {str(e)}"
 
 
 def add_surface_area_fit_curve(ax, plot_df, is_log_scale, fit_color='#C45B5B'):
@@ -1805,84 +1753,6 @@ def lognormal_pdf(x, mu, sigma, amplitude):
     return pdf
 
 
-def fit_lognormal_distribution(surface_areas, counts):
-    """Fit a lognormal distribution to count vs surface area data."""
-    try:
-        # Check if we have enough data points
-        if len(surface_areas) < 5:
-            return False, "Insufficient data points for fitting"
-        
-        # Initial parameter estimates using more robust method
-        # Convert to log space for initial estimates
-        log_sa = np.log(surface_areas)
-        
-        # Weighted statistics for initial parameter estimates
-        weights = counts / np.sum(counts)  # Normalize weights
-        initial_mu = np.average(log_sa, weights=weights)
-        initial_sigma = np.sqrt(np.average((log_sa - initial_mu)**2, weights=weights))
-        
-        # Ensure sigma is reasonable
-        initial_sigma = max(0.1, min(initial_sigma, 3.0))
-        
-        # Scale amplitude based on data
-        max_count = np.max(counts)
-        initial_amplitude = max_count * 0.5  # Start with conservative amplitude
-        
-        initial_params = [initial_mu, initial_sigma, initial_amplitude]
-        
-        print(f"      Initial parameters: mu={initial_mu:.3f}, sigma={initial_sigma:.3f}, amp={initial_amplitude:.1f}")
-        
-        # More reasonable bounds
-        lower_bounds = [
-            np.log(surface_areas.min() * 0.1),  # mu lower bound
-            0.05,                               # sigma lower bound  
-            max_count * 0.01                    # amplitude lower bound
-        ]
-        upper_bounds = [
-            np.log(surface_areas.max() * 10),   # mu upper bound
-            5.0,                                # sigma upper bound
-            max_count * 5.0                     # amplitude upper bound
-        ]
-        
-        print(f"      Bounds: mu=[{lower_bounds[0]:.3f}, {upper_bounds[0]:.3f}], sigma=[{lower_bounds[1]:.3f}, {upper_bounds[1]:.3f}]")
-        
-        # Check if initial parameters are within bounds
-        for i, (param, lower, upper) in enumerate(zip(initial_params, lower_bounds, upper_bounds)):
-            if param < lower or param > upper:
-                print(f"      Adjusting parameter {i}: {param:.3f} -> bounds [{lower:.3f}, {upper:.3f}]")
-                initial_params[i] = max(lower, min(param, upper))
-        
-        # Perform curve fitting with adjusted parameters
-        params, covariance = curve_fit(
-            lognormal_pdf, surface_areas, counts, 
-            p0=initial_params,
-            bounds=(lower_bounds, upper_bounds), 
-            maxfev=5000,
-            method='trf'  # Trust Region Reflective algorithm, more robust
-        )
-        
-        # Generate fitted curve with more points and proper range
-        sa_min = surface_areas.min() * 0.8  # Extend slightly beyond data
-        sa_max = surface_areas.max() * 1.2
-        sa_range = np.linspace(sa_min, sa_max, 500)  # More points for smoother curve
-        fitted_curve = lognormal_pdf(sa_range, *params)
-        
-        # Ensure the curve is smooth and reasonable
-        if np.any(np.isnan(fitted_curve)) or np.any(np.isinf(fitted_curve)):
-            return False, "Fit produced invalid values (NaN or inf)"
-        
-        # Check if fit is reasonable
-        if np.max(fitted_curve) > max_count * 10 or np.max(fitted_curve) < max_count * 0.01:
-            return False, "Fit amplitude is unreasonable"
-        
-        print(f"      Final parameters: mu={params[0]:.3f}, sigma={params[1]:.3f}, amp={params[2]:.1f}")
-        print(f"      Curve range: {sa_min:.4f} - {sa_max:.4f} µm², max value: {np.max(fitted_curve):.1f}")
-        
-        return True, (sa_range, fitted_curve, params)
-        
-    except Exception as e:
-        return False, f"Lognormal fit failed: {str(e)}"
-
 
 def add_d_value_lines_and_bands_surface_area(ax, stats):
     """Add D-value lines and uncertainty bands to a subplot, converted to surface area in µm²."""
@@ -2357,113 +2227,6 @@ def lognormal_pdf(x, mu, sigma, amplitude):
     
     return pdf
 
-
-def fit_lognormal_distribution(volumes, counts):
-    """Fit a lognormal distribution to count vs volume data with better handling of extreme skewness."""
-    try:
-        # Check if we have enough data points
-        if len(volumes) < 5:
-            return False, "Insufficient data points for fitting"
-        
-        # For volume data, we need to be much more careful due to extreme skewness
-        # Find the peak location first
-        peak_idx = np.argmax(counts)
-        peak_volume = volumes[peak_idx]
-        peak_count = counts[peak_idx]
-        
-        print(f"      Peak at volume: {peak_volume:.6f} µm³, count: {peak_count:.1f}")
-        
-        # Use a more robust approach - focus on the main distribution
-        # Only use data points that are within reasonable range of the peak
-        volume_range = volumes.max() - volumes.min()
-        focus_mask = (volumes >= volumes.min()) & (volumes <= peak_volume + volume_range * 0.3)
-        
-        if np.sum(focus_mask) < 5:
-            focus_mask = np.ones_like(volumes, dtype=bool)  # Use all data if focus range too small
-        
-        volumes_focus = volumes[focus_mask]
-        counts_focus = counts[focus_mask]
-        
-        print(f"      Using {len(volumes_focus)} focused data points for fitting")
-        
-        # Initial parameter estimates using the focused data
-        log_vol = np.log(volumes_focus)
-        weights = counts_focus / np.sum(counts_focus)
-        
-        initial_mu = np.average(log_vol, weights=weights)
-        initial_sigma = np.sqrt(np.average((log_vol - initial_mu)**2, weights=weights))
-        
-        # Constrain sigma much more tightly for volume data
-        initial_sigma = max(0.2, min(initial_sigma, 2.0))  # Much tighter constraints
-        
-        # Better amplitude estimate based on peak
-        initial_amplitude = peak_count * 0.8
-        
-        initial_params = [initial_mu, initial_sigma, initial_amplitude]
-        
-        print(f"      Initial parameters: mu={initial_mu:.3f}, sigma={initial_sigma:.3f}, amp={initial_amplitude:.1f}")
-        
-        # Much tighter bounds for volume fitting
-        max_count = np.max(counts)
-        lower_bounds = [
-            np.log(volumes.min() * 0.5),        # mu lower bound
-            0.1,                                # sigma lower bound (much tighter)
-            max_count * 0.1                     # amplitude lower bound
-        ]
-        upper_bounds = [
-            np.log(peak_volume * 3),            # mu upper bound (focused around peak)
-            1.5,                                # sigma upper bound (much tighter)
-            max_count * 2.0                     # amplitude upper bound
-        ]
-        
-        print(f"      Bounds: mu=[{lower_bounds[0]:.3f}, {upper_bounds[0]:.3f}], sigma=[{lower_bounds[1]:.3f}, {upper_bounds[1]:.3f}]")
-        
-        # Check if initial parameters are within bounds
-        for i, (param, lower, upper) in enumerate(zip(initial_params, lower_bounds, upper_bounds)):
-            if param < lower or param > upper:
-                print(f"      Adjusting parameter {i}: {param:.3f} -> bounds [{lower:.3f}, {upper:.3f}]")
-                initial_params[i] = max(lower, min(param, upper))
-        
-        # Perform curve fitting with adjusted parameters - use all data but constrained parameters
-        params, covariance = curve_fit(
-            lognormal_pdf, volumes, counts, 
-            p0=initial_params,
-            bounds=(lower_bounds, upper_bounds), 
-            maxfev=10000,
-            method='trf'
-        )
-        
-        # Generate fitted curve with more points and proper range
-        vol_min = volumes.min() * 0.9
-        vol_max = min(volumes.max() * 1.1, peak_volume * 5)  # Don't extend too far beyond peak
-        vol_range = np.linspace(vol_min, vol_max, 500)
-        fitted_curve = lognormal_pdf(vol_range, *params)
-        
-        # Check if fit is reasonable - much stricter criteria for volume
-        if np.any(np.isnan(fitted_curve)) or np.any(np.isinf(fitted_curve)):
-            return False, "Fit produced invalid values (NaN or inf)"
-        
-        # Check fit quality - the peak should be reasonably close
-        fit_peak_idx = np.argmax(fitted_curve)
-        fit_peak_volume = vol_range[fit_peak_idx]
-        fit_peak_count = fitted_curve[fit_peak_idx]
-        
-        # Peak should be within reasonable range
-        if abs(fit_peak_volume - peak_volume) > peak_volume * 0.5:
-            return False, f"Fit peak too far from data peak: {fit_peak_volume:.6f} vs {peak_volume:.6f}"
-        
-        # Peak height should be reasonable
-        if fit_peak_count > max_count * 3 or fit_peak_count < max_count * 0.1:
-            return False, f"Fit peak height unreasonable: {fit_peak_count:.1f} vs {peak_count:.1f}"
-        
-        print(f"      Final parameters: mu={params[0]:.3f}, sigma={params[1]:.3f}, amp={params[2]:.1f}")
-        print(f"      Curve range: {vol_min:.6f} - {vol_max:.6f} µm³, max value: {np.max(fitted_curve):.1f}")
-        print(f"      Fit peak at: {fit_peak_volume:.6f} µm³ (data peak: {peak_volume:.6f} µm³)")
-        
-        return True, (vol_range, fitted_curve, params)
-        
-    except Exception as e:
-        return False, f"Lognormal fit failed: {str(e)}"
 
 
 def add_d_value_lines_and_bands_volume(ax, stats):
