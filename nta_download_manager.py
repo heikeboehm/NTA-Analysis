@@ -136,26 +136,95 @@ def export_fit_data_tsv(distribution_df, stats_dict, scale_type='linear', dist_t
     return '\n'.join(lines) + '\n' + tsv_content
 
 
-def create_download_zip(output_dir, unique_id, num_replicates):
+def create_download_zip(output_dir, unique_id, num_replicates, metadata_dict=None, 
+                       distribution_df=None, statistics_dict=None):
     """
-    Create a ZIP file with all generated files.
+    Create a ZIP file with all analysis results.
+    
+    Includes:
+    - Distribution data (CSV)
+    - Metadata (TSV)
+    - Statistics (TSV)
+    - Fit data (TSV)
+    - Plot PDFs (skips PNGs)
     
     Returns: bytes for download
     """
     zip_buffer = io.BytesIO()
     
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        # Add all files from output directory
         output_path = Path(output_dir)
         
-        if not output_path.exists():
-            return None
+        # Add data files section
+        # 1. Distribution data
+        if distribution_df is not None:
+            try:
+                dist_csv = distribution_df.to_csv(index=False)
+                zip_file.writestr(
+                    f"data/distribution_{unique_id}_avg{num_replicates}.csv",
+                    dist_csv
+                )
+            except Exception as e:
+                print(f"  ⚠ Could not add distribution data: {str(e)}")
         
-        for file_path in output_path.glob('*'):
-            if file_path.is_file():
-                # Use relative path for cleaner ZIP structure
-                arcname = f"{unique_id}_analysis/{file_path.name}"
-                zip_file.write(file_path, arcname=arcname)
+        # 2. Metadata
+        if metadata_dict is not None:
+            try:
+                metadata_df = pd.DataFrame(
+                    [(k, v) for k, v in metadata_dict.items()],
+                    columns=['Field', 'Value']
+                )
+                metadata_tsv = metadata_df.to_csv(sep='\t', index=False)
+                zip_file.writestr(
+                    f"data/metadata_{unique_id}_avg{num_replicates}.txt",
+                    metadata_tsv
+                )
+            except Exception as e:
+                print(f"  ⚠ Could not add metadata: {str(e)}")
+        
+        # 3. Statistics
+        if statistics_dict is not None:
+            try:
+                stats_list = []
+                for scale in statistics_dict:
+                    if isinstance(statistics_dict[scale], dict):
+                        for dist_type in statistics_dict[scale]:
+                            stat_dict = statistics_dict[scale][dist_type]
+                            row = {
+                                'Scale': scale,
+                                'Distribution': dist_type,
+                                **stat_dict
+                            }
+                            stats_list.append(row)
+                
+                if stats_list:
+                    stats_df = pd.DataFrame(stats_list)
+                    stats_tsv = stats_df.to_csv(sep='\t', index=False)
+                    zip_file.writestr(
+                        f"data/statistics_{unique_id}_avg{num_replicates}.txt",
+                        stats_tsv
+                    )
+            except Exception as e:
+                print(f"  ⚠ Could not add statistics: {str(e)}")
+        
+        # Add plot PDFs (skip PNGs)
+        if output_path.exists():
+            pdf_files = sorted(output_path.glob('*Plot_*.pdf'))
+            if pdf_files:
+                for pdf_file in pdf_files:
+                    try:
+                        zip_file.write(pdf_file, arcname=f"plots/{pdf_file.name}")
+                    except Exception as e:
+                        print(f"  ⚠ Could not add plot: {str(e)}")
+            
+            # Add fit data TSV files
+            fit_files = sorted(output_path.glob('FitData_*.txt'))
+            if fit_files:
+                for fit_file in fit_files:
+                    try:
+                        zip_file.write(fit_file, arcname=f"fit_data/{fit_file.name}")
+                    except Exception as e:
+                        print(f"  ⚠ Could not add fit data: {str(e)}")
     
     zip_buffer.seek(0)
     return zip_buffer.getvalue()

@@ -408,40 +408,112 @@ if st.session_state.analysis_complete:
     
     # SUMMARY TAB
     with tab_summary:
-        st.subheader("📊 Analysis Summary")
+        st.subheader("📊 Analysis Overview")
         
-        col1, col2, col3, col4 = st.columns(4)
+        # Display number-weighted linear plot at the top
+        st.markdown("**Number-Weighted Distribution (Linear Scale)**")
+        
+        dist_df = st.session_state.distribution_data
+        linear_data = dist_df[(dist_df['scale'] == 'linear')].sort_values('size_nm')
+        
+        if not linear_data.empty and 'size_nm' in linear_data.columns and 'number_normalized_avg' in linear_data.columns:
+            fig, ax = plt.subplots(figsize=(11, 5))
+            
+            ax.bar(linear_data['size_nm'], linear_data['number_normalized_avg'], 
+                   color='#4C5B5C', alpha=0.7, edgecolor='black', linewidth=0.8)
+            
+            # Add error bars if available
+            if 'number_normalized_sd' in linear_data.columns:
+                ax.errorbar(linear_data['size_nm'], linear_data['number_normalized_avg'],
+                           yerr=linear_data['number_normalized_sd'],
+                           fmt='none', ecolor='black', capsize=3, alpha=0.5)
+            
+            ax.set_xlabel('Size (nm)', fontsize=12, fontweight='bold')
+            ax.set_ylabel('Normalized Number', fontsize=12, fontweight='bold')
+            ax.set_title('Number-Weighted Particle Size Distribution', fontsize=13, fontweight='bold')
+            ax.grid(axis='y', alpha=0.3)
+            
+            plt.tight_layout()
+            st.pyplot(fig)
+            plt.close(fig)
+        
+        st.markdown("---")
+        st.subheader("📊 Key Metrics")
+        
+        # Create three columns for the main metrics
+        col1, col2, col3 = st.columns(3)
         
         with col1:
-            num_files = st.session_state.metadata.get('num_replicates', 'N/A')
-            st.metric("Number of Files", num_files)
-        
-        with col2:
-            total_tracks = st.session_state.metadata.get('nta_number_of_traces_sum', 'N/A')
-            st.metric("Total Tracks", total_tracks)
-        
-        with col3:
-            dist_df = st.session_state.distribution_data
+            # Total concentration (particles/mL)
             if 'concentration_cm-3_per_mL_avg' in dist_df.columns:
                 linear_df = dist_df[dist_df['scale'] == 'linear']
-                concentration = linear_df['concentration_cm-3_per_mL_avg'].sum() if not linear_df.empty else 0
-                st.metric("Concentration (particles/mL)", f"{concentration:.2e}")
+                total_conc = linear_df['concentration_cm-3_per_mL_avg'].sum() if not linear_df.empty else 0
+                st.metric("Total Concentration", f"{total_conc:.2e} particles/mL")
             else:
-                st.metric("Concentration (particles/mL)", "N/A")
+                st.metric("Total Concentration", "N/A")
         
-        with col4:
-            if st.session_state.statistics:
-                stats = st.session_state.statistics
-                if 'linear' in stats and 'number' in stats['linear']:
-                    d50 = stats['linear']['number'].get('D50_avg', 'N/A')
-                    if isinstance(d50, (int, float)):
-                        st.metric("D50 (nm)", f"{d50:.2f}")
-                    else:
-                        st.metric("D50 (nm)", d50)
-                else:
-                    st.metric("D50 (nm)", "N/A")
+        with col2:
+            # Total surface area (nm²/mL)
+            if 'area_nm^2_per_mL_avg' in dist_df.columns:
+                linear_df = dist_df[dist_df['scale'] == 'linear']
+                total_area = linear_df['area_nm^2_per_mL_avg'].sum() if not linear_df.empty else 0
+                st.metric("Total Surface Area", f"{total_area:.2e} nm²/mL")
             else:
-                st.metric("D50 (nm)", "N/A")
+                st.metric("Total Surface Area", "N/A")
+        
+        with col3:
+            # Total volume (nm³/mL)
+            if 'volume_nm^3_per_mL_avg' in dist_df.columns:
+                linear_df = dist_df[dist_df['scale'] == 'linear']
+                total_vol = linear_df['volume_nm^3_per_mL_avg'].sum() if not linear_df.empty else 0
+                st.metric("Total Volume", f"{total_vol:.2e} nm³/mL")
+            else:
+                st.metric("Total Volume", "N/A")
+        
+        st.markdown("---")
+        st.subheader("📈 Percentile Statistics")
+        
+        # Display D50 and Span for each distribution type
+        if st.session_state.statistics:
+            stats = st.session_state.statistics
+            
+            col1, col2, col3 = st.columns(3)
+            
+            # Number distribution
+            with col1:
+                st.markdown("**Number Distribution**")
+                if 'linear' in stats and 'number' in stats['linear']:
+                    num_stats = stats['linear']['number']
+                    d50 = num_stats.get('D50_avg', 'N/A')
+                    span = num_stats.get('span_avg', 'N/A')
+                    st.write(f"D50: {d50:.2f} nm" if isinstance(d50, (int, float)) else f"D50: {d50}")
+                    st.write(f"Span: {span:.3f}" if isinstance(span, (int, float)) else f"Span: {span}")
+                else:
+                    st.write("No statistics available")
+            
+            # Volume distribution
+            with col2:
+                st.markdown("**Volume Distribution**")
+                if 'linear' in stats and 'volume' in stats['linear']:
+                    vol_stats = stats['linear']['volume']
+                    d50 = vol_stats.get('D50_avg', 'N/A')
+                    span = vol_stats.get('span_avg', 'N/A')
+                    st.write(f"D50: {d50:.2f} nm" if isinstance(d50, (int, float)) else f"D50: {d50}")
+                    st.write(f"Span: {span:.3f}" if isinstance(span, (int, float)) else f"Span: {span}")
+                else:
+                    st.write("No statistics available")
+            
+            # Surface area distribution
+            with col3:
+                st.markdown("**Surface Area Distribution**")
+                if 'linear' in stats and 'surface_area' in stats['linear']:
+                    surf_stats = stats['linear']['surface_area']
+                    d50 = surf_stats.get('D50_avg', 'N/A')
+                    span = surf_stats.get('span_avg', 'N/A')
+                    st.write(f"D50: {d50:.2f} nm" if isinstance(d50, (int, float)) else f"D50: {d50}")
+                    st.write(f"Span: {span:.3f}" if isinstance(span, (int, float)) else f"Span: {span}")
+                else:
+                    st.write("No statistics available")
         
         st.markdown("---")
         st.subheader("📋 Sample Information")
@@ -455,29 +527,10 @@ if st.session_state.analysis_complete:
         
         with col2:
             st.write(f"**PI:** {st.session_state.pi}")
+            num_files = st.session_state.metadata.get('num_replicates', 'N/A')
+            st.write(f"**Num Files:** {num_files}")
             dilution_val = st.session_state.metadata.get('nta_dilution', 'N/A')
             st.write(f"**Dilution Factor:** {dilution_val}")
-        
-        st.markdown("---")
-        st.subheader("Quick Visualization")
-        
-        dist_df = st.session_state.distribution_data
-        linear_data = dist_df[(dist_df['scale'] == 'linear')]
-        
-        if not linear_data.empty and 'size_nm' in linear_data.columns and 'number_normalized_avg' in linear_data.columns:
-            fig, ax = plt.subplots(figsize=(10, 5))
-            
-            ax.bar(linear_data['size_nm'], linear_data['number_normalized_avg'], 
-                   color='#1f77b4', alpha=0.7, edgecolor='black', linewidth=0.5)
-            
-            ax.set_xlabel('Size (nm)', fontsize=11)
-            ax.set_ylabel('Normalized Count', fontsize=11)
-            ax.set_title('Number-Weighted Distribution (Linear Scale)', fontsize=12, fontweight='bold')
-            ax.grid(axis='y', alpha=0.3)
-            
-            plt.tight_layout()
-            st.pyplot(fig)
-            plt.close(fig)
     
     # DISTRIBUTIONS TAB
     with tab_distributions:
@@ -810,9 +863,11 @@ if st.session_state.analysis_complete:
             with col_zip1:
                 st.markdown(f"""
                 **Download everything as a single ZIP file:**
-                - ✅ All data files (distribution, metadata, statistics)
-                - ✅ All generated plots (PDFs + PNGs)
-                - ✅ All fit data (TSV with parameters)
+                - ✅ Distribution data (CSV)
+                - ✅ Metadata (TSV)
+                - ✅ Statistics (TSV)
+                - ✅ All generated plots (PDFs only, no PNGs)
+                - ✅ All fit data (TSV with lognormal parameters)
                 """)
             
             with col_zip2:
@@ -820,7 +875,10 @@ if st.session_state.analysis_complete:
                     zip_bytes = nta_download_manager.create_download_zip(
                         st.session_state.plot_output_dir,
                         unique_id,
-                        num_replicates
+                        num_replicates,
+                        metadata_dict=st.session_state.metadata,
+                        distribution_df=st.session_state.distribution_data,
+                        statistics_dict=st.session_state.statistics
                     )
                     
                     if zip_bytes:
