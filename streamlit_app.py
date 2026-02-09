@@ -104,11 +104,11 @@ initialize_session_state()
 # SIDEBAR - FILE UPLOAD & METADATA
 # ============================================================================
 
-st.sidebar.title("ðŸ§ª NTA Analysis Control")
+st.sidebar.title("🧪 NTA Analysis Control")
 st.sidebar.markdown("---")
 
 # File upload section
-st.sidebar.subheader("ðŸ“ File Upload")
+st.sidebar.subheader("📁 File Upload")
 uploaded_files = st.sidebar.file_uploader(
     "Upload NTA data files (.txt)",
     type=["txt"],
@@ -123,7 +123,7 @@ if uploaded_files:
 st.sidebar.markdown("---")
 
 # Metadata section
-st.sidebar.subheader("ðŸ‘¤ User Metadata")
+st.sidebar.subheader("👤 User Metadata")
 
 st.session_state.experimenter = st.sidebar.text_input(
     "Experimenter Initials",
@@ -163,7 +163,7 @@ if st.sidebar.button("â–¶ï¸ RUN ANALYSIS", key="run_button", type="prima
 # MAIN CONTENT AREA
 # ============================================================================
 
-st.title("ðŸ§ª NTA Data Analysis Tool")
+st.title("🧪 NTA Data Analysis Tool")
 st.markdown("Nanoparticle Tracking Analysis Data Processing")
 
 # Processing section
@@ -326,7 +326,7 @@ if st.session_state.analysis_complete:
     
     # SUMMARY TAB
     with tab_summary:
-        st.subheader("Analysis Summary")
+        st.subheader("📊 Analysis Summary")
         
         col1, col2, col3, col4 = st.columns(4)
         
@@ -399,7 +399,7 @@ if st.session_state.analysis_complete:
     
     # DISTRIBUTIONS TAB
     with tab_distributions:
-        st.subheader("Distribution Data Tables")
+        st.subheader("📊 Distribution Data Tables")
         
         dist_df = st.session_state.distribution_data
         scale_filter = st.radio("Scale", ["linear", "logarithmic"], horizontal=True)
@@ -428,7 +428,7 @@ if st.session_state.analysis_complete:
     
     # STATISTICS TAB
     with tab_statistics:
-        st.subheader("Statistical Summary")
+        st.subheader("📉 Statistical Summary")
         
         if st.session_state.statistics and isinstance(st.session_state.statistics, dict):
             stats = st.session_state.statistics
@@ -471,7 +471,7 @@ if st.session_state.analysis_complete:
     
     # DOWNLOAD TAB
     with tab_download:
-        st.subheader("Download Analysis Results")
+        st.subheader("📥 Download Analysis Results")
         
         st.markdown("Export your complete analysis results:")
         
