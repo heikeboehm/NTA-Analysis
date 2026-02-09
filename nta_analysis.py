@@ -490,7 +490,7 @@ def smart_format_field(field_name, values):
             else:
                 notes = f"mean_sd_of_{len(values)}"
             
-            return f"{mean_val:.2f} ± {std_val:.2f}", notes
+            return f"{mean_val:.2f} Â± {std_val:.2f}", notes
         except ValueError:
             return json.dumps(values), "non_numeric_different"
 
@@ -622,7 +622,7 @@ def apply_dilution_correction_with_uncertainty(df, metadata=None, manual_dilutio
         if 'nta_dilution' in metadata:
             try:
                 dilution_string = metadata['nta_dilution']
-                dilution_factor = float(dilution_string.split('±')[0].strip()) if '±' in dilution_string else float(dilution_string)
+                dilution_factor = float(dilution_string.split('Â±')[0].strip()) if 'Â±' in dilution_string else float(dilution_string)
                 dilution_source = "metadata (nta_dilution)"
             except (ValueError, TypeError):
                 pass
@@ -769,6 +769,9 @@ def interpolate_d_value_with_bounds(sizes, cumsum_avg, cumsum_sd, target_fractio
 
 def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
     """Calculate percentile statistics (D10, D50, D90, span) with uncertainties."""
+    if df is None or df.empty:
+        return False, "Input dataframe is empty"
+    
     stats = {'linear': {}, 'logarithmic': {}}
     
     cumsum_configs = [
@@ -864,4 +867,4 @@ def calculate_percentile_statistics_with_uncertainty(df, size_column='size_nm'):
             except Exception:
                 continue
     
-    return stats
+    return True, stats
