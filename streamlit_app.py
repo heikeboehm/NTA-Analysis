@@ -179,9 +179,9 @@ st.session_state.pi = st.sidebar.text_input(
 st.sidebar.markdown("---")
 
 # Run analysis button
-if st.sidebar.button("¶ï¸ RUN ANALYSIS", key="run_button", type="primary", use_container_width=True):
+if st.sidebar.button("▶️  RUN ANALYSIS", key="run_button", type="primary", use_container_width=True):
     if not uploaded_files:
-        st.sidebar.error("Œ Please upload at least one file")
+        st.sidebar.error("❌ Please upload at least one file")
     else:
         st.session_state.analysis_complete = False
         st.session_state.run_analysis = True
@@ -209,10 +209,10 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                 if success:
                     files_data.append((uploaded_file.name, file_content, sections))
                 else:
-                    st.warning(f"⚠️ ï¸ Could not identify sections in {uploaded_file.name}")
+                    st.warning(f"⚠️  Could not identify sections in {uploaded_file.name}")
             
             if not files_data:
-                st.error("Œ Could not process any files")
+                st.error("❌ Could not process any files")
             else:
                 # Step 2: Extract distribution data
                 st.write("📊 Extracting distribution data...")
@@ -223,10 +223,10 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                     if success:
                         distribution_dfs.append(result)
                     else:
-                        st.warning(f"⚠️ ï¸ Could not extract data from {filename}")
+                        st.warning(f"⚠️  Could not extract data from {filename}")
                 
                 if not distribution_dfs:
-                    st.error("Œ Could not extract data from any files")
+                    st.error("❌ Could not extract data from any files")
                 else:
                     # Step 3: Average replicates
                     st.write("📈 Averaging replicates...")
@@ -235,7 +235,7 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                     success, distribution_df = average_replicate_data(distribution_dfs, filenames)
                     
                     if not success:
-                        st.error(f"Œ Error averaging data: {distribution_df}")
+                        st.error(f"❌ Error averaging data: {distribution_df}")
                     else:
                         # Step 4: Extract metadata
                         st.write("📊 Extracting metadata...")
@@ -259,10 +259,10 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                             except (ValueError, TypeError):
                                 dilution_factor = 1.0
                             
-                            st.write(f"Œ Using dilution factor: {dilution_factor}")
-                            st.write(f"Œ Sample ID: {sample_id_from_meta}")
+                            st.write(f"📌 Using dilution factor: {dilution_factor}")
+                            st.write(f"📌 Sample ID: {sample_id_from_meta}")
                         else:
-                            st.warning("âš ï¸ Could not extract metadata, using defaults")
+                            st.warning("âš  Could not extract metadata, using defaults")
                             metadata = {'experimenter': st.session_state.experimenter}
                         
                         # Step 5: Apply dilution correction
@@ -275,7 +275,7 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                         )
                         
                         if not success:
-                            st.warning(f"⚠️ ï¸ {distribution_df}")
+                            st.warning(f"⚠️  {distribution_df}")
                         
                         # Step 6: Calculate distributions
                         st.write("📊 Calculating normalized distributions...")
@@ -286,7 +286,7 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                             success, distribution_df = calculate_cumulative_distributions_with_uncertainty(distribution_df)
                         
                         if not success:
-                            st.warning(f"⚠️ ï¸ Error calculating distributions: {distribution_df}")
+                            st.warning(f"⚠️  Error calculating distributions: {distribution_df}")
                         
                         # Step 7: Calculate statistics
                         st.write("📉 Calculating statistics...")
@@ -294,7 +294,7 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                         success, statistics = calculate_percentile_statistics_with_uncertainty(distribution_df)
                         
                         if not success:
-                            st.warning(f"⚠️ ï¸ Error calculating statistics: {statistics}")
+                            st.warning(f"⚠️  Error calculating statistics: {statistics}")
                         else:
                             # Step 7b: Calculate concentration totals
                             st.write("📊 Calculating concentration totals...")
@@ -337,7 +337,7 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
                             st.rerun()
         
         except Exception as e:
-            st.error(f"Œ Error during analysis: {str(e)}")
+            st.error(f"❌ Error during analysis: {str(e)}")
             st.session_state.run_analysis = False
 
 # ============================================================================
@@ -348,7 +348,7 @@ if st.session_state.analysis_complete:
     st.markdown("---")
     
     tab_summary, tab_distributions, tab_statistics, tab_download = st.tabs(
-        ["Š Summary", "ˆ Distributions", "‰ Statistics", "‡ï¸ Download"]
+        ["📊 Summary", "📈 Distributions", "📉 Statistics", "📥 Download"]
     )
     
     # SUMMARY TAB
@@ -582,7 +582,7 @@ if st.session_state.analysis_complete:
 
 else:
     # No analysis yet
-    st.info("† Upload NTA files and click 'RUN ANALYSIS' to begin")
+    st.info("👆 Upload NTA files and click 'RUN ANALYSIS' to begin")
     st.markdown("""
     ## How to use:
     
