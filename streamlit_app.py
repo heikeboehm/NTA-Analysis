@@ -142,6 +142,8 @@ def initialize_session_state():
         st.session_state.plot_output_dir = None
     if 'generated_plots' not in st.session_state:
         st.session_state.generated_plots = []
+    if 'research_focus' not in st.session_state:
+        st.session_state.research_focus = 'Number of particles (size distribution)'
 
 initialize_session_state()
 
@@ -173,8 +175,8 @@ st.sidebar.subheader("👤 User Metadata (Optional)")
 # Toggle to include user metadata in analysis
 include_user_metadata = st.sidebar.checkbox(
     "Add user metadata to analysis?",
-    value=True,
-    help="Include experimenter, project, location, and PI in the analysis metadata"
+    value=False,
+    help="Include experimenter, project, location, and PI in the analysis metadata (optional)"
 )
 
 if include_user_metadata:
@@ -207,6 +209,22 @@ else:
     st.session_state.project = ""
     st.session_state.location = ""
     st.session_state.pi = ""
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔬 Research Focus")
+
+research_focus = st.sidebar.radio(
+    "What are you primarily interested in?",
+    options=[
+        "Number of particles (size distribution)",
+        "Surface area distribution",
+        "Internal volume distribution"
+    ],
+    help="This helps highlight the most relevant metrics",
+    index=0
+)
+
+st.session_state.research_focus = research_focus
 
 st.sidebar.markdown("---")
 
@@ -424,27 +442,57 @@ if st.session_state.analysis_complete:
     with tab_summary:
         st.subheader("📊 Analysis Overview")
         
-        # Display number-weighted linear plot at the top
-        st.markdown("**Number-Weighted Distribution (Linear Scale)**")
-        
         dist_df = st.session_state.distribution_data
+        stats = st.session_state.statistics if st.session_state.statistics else {}
+        research_focus = st.session_state.get('research_focus', 'Number of particles (size distribution)')
+        
+        # Determine which distribution to show based on research focus
+        if 'Number of particles' in research_focus:
+            dist_type = 'number'
+            total_metric_label = "Total Concentration"
+            total_metric_col = 'concentration_cm-3_per_mL_avg'
+            total_metric_unit = "particles/mL"
+            plot_title = "Number-Weighted Particle Size Distribution"
+            plot_col = 'number_normalized_avg'
+            plot_err_col = 'number_normalized_sd'
+            ylabel = "Normalized Number"
+        elif 'Surface area' in research_focus:
+            dist_type = 'surface_area'
+            total_metric_label = "Total Surface Area"
+            total_metric_col = 'area_nm^2_per_mL_avg'
+            total_metric_unit = "nm²/mL"
+            plot_title = "Surface Area-Weighted Distribution"
+            plot_col = 'area_nm^2_per_mL_avg'
+            plot_err_col = 'area_nm^2_per_mL_sd'
+            ylabel = "Surface Area (nm²/mL)"
+        else:  # Internal volume
+            dist_type = 'volume'
+            total_metric_label = "Total Volume"
+            total_metric_col = 'volume_nm^3_per_mL_avg'
+            total_metric_unit = "nm³/mL"
+            plot_title = "Volume-Weighted Distribution"
+            plot_col = 'volume_nm^3_per_mL_avg'
+            plot_err_col = 'volume_nm^3_per_mL_sd'
+            ylabel = "Volume (nm³/mL)"
+        
+        # Display plot
         linear_data = dist_df[(dist_df['scale'] == 'linear')].sort_values('size_nm')
         
-        if not linear_data.empty and 'size_nm' in linear_data.columns and 'number_normalized_avg' in linear_data.columns:
+        if not linear_data.empty and plot_col in linear_data.columns:
             fig, ax = plt.subplots(figsize=(11, 5))
             
-            ax.bar(linear_data['size_nm'], linear_data['number_normalized_avg'], 
+            ax.bar(linear_data['size_nm'], linear_data[plot_col], 
                    color='#4C5B5C', alpha=0.7, edgecolor='black', linewidth=0.8)
             
             # Add error bars if available
-            if 'number_normalized_sd' in linear_data.columns:
-                ax.errorbar(linear_data['size_nm'], linear_data['number_normalized_avg'],
-                           yerr=linear_data['number_normalized_sd'],
+            if plot_err_col in linear_data.columns:
+                ax.errorbar(linear_data['size_nm'], linear_data[plot_col],
+                           yerr=linear_data[plot_err_col],
                            fmt='none', ecolor='black', capsize=3, alpha=0.5)
             
             ax.set_xlabel('Size (nm)', fontsize=12, fontweight='bold')
-            ax.set_ylabel('Normalized Number', fontsize=12, fontweight='bold')
-            ax.set_title('Number-Weighted Particle Size Distribution', fontsize=13, fontweight='bold')
+            ax.set_ylabel(ylabel, fontsize=12, fontweight='bold')
+            ax.set_title(plot_title, fontsize=13, fontweight='bold')
             ax.grid(axis='y', alpha=0.3)
             
             plt.tight_layout()
@@ -454,97 +502,46 @@ if st.session_state.analysis_complete:
         st.markdown("---")
         st.subheader("📊 Key Metrics")
         
-        # Create three columns for the main metrics (order: number, surface area, volume)
+        # Show total metric for the research focus
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            # Total concentration (particles/mL) - NUMBER
-            if 'concentration_cm-3_per_mL_avg' in dist_df.columns:
+            if total_metric_col in dist_df.columns:
                 linear_df = dist_df[dist_df['scale'] == 'linear']
-                total_conc = linear_df['concentration_cm-3_per_mL_avg'].sum() if not linear_df.empty else 0
-                st.metric("Total Concentration", f"{total_conc:.2e} particles/mL")
+                total_val = linear_df[total_metric_col].sum() if not linear_df.empty else 0
+                st.metric(total_metric_label, f"{total_val:.2e} {total_metric_unit}")
             else:
-                st.metric("Total Concentration", "N/A")
+                st.metric(total_metric_label, "N/A")
         
+        # Show D50 with confidence interval
         with col2:
-            # Total surface area (nm²/mL) - SURFACE AREA
-            if 'area_nm^2_per_mL_avg' in dist_df.columns:
-                linear_df = dist_df[dist_df['scale'] == 'linear']
-                total_area = linear_df['area_nm^2_per_mL_avg'].sum() if not linear_df.empty else 0
-                st.metric("Total Surface Area", f"{total_area:.2e} nm²/mL")
+            if 'linear' in stats and dist_type in stats['linear']:
+                stat_dict = stats['linear'][dist_type]
+                d50_avg = stat_dict.get('D50_avg', 'N/A')
+                d50_lower = stat_dict.get('D50_lower', 'N/A')
+                d50_upper = stat_dict.get('D50_upper', 'N/A')
+                
+                if isinstance(d50_avg, (int, float)):
+                    st.metric("D50", f"{d50_avg:.2f} nm\n({d50_lower:.2f} - {d50_upper:.2f})")
+                else:
+                    st.metric("D50", "N/A")
             else:
-                st.metric("Total Surface Area", "N/A")
+                st.metric("D50", "N/A")
         
+        # Show Span with confidence interval
         with col3:
-            # Total volume (nm³/mL) - VOLUME
-            if 'volume_nm^3_per_mL_avg' in dist_df.columns:
-                linear_df = dist_df[dist_df['scale'] == 'linear']
-                total_vol = linear_df['volume_nm^3_per_mL_avg'].sum() if not linear_df.empty else 0
-                st.metric("Total Volume", f"{total_vol:.2e} nm³/mL")
+            if 'linear' in stats and dist_type in stats['linear']:
+                stat_dict = stats['linear'][dist_type]
+                span_avg = stat_dict.get('span_avg', 'N/A')
+                span_lower = stat_dict.get('span_lower', 'N/A')
+                span_upper = stat_dict.get('span_upper', 'N/A')
+                
+                if isinstance(span_avg, (int, float)):
+                    st.metric("Span", f"{span_avg:.2f}\n({span_lower:.2f} - {span_upper:.2f})")
+                else:
+                    st.metric("Span", "N/A")
             else:
-                st.metric("Total Volume", "N/A")
-        
-        st.markdown("---")
-        st.subheader("📈 Percentile Statistics")
-        
-        # Display D50 and Span for each distribution type (order: number, surface area, volume)
-        if st.session_state.statistics:
-            stats = st.session_state.statistics
-            
-            col1, col2, col3 = st.columns(3)
-            
-            # Number distribution
-            with col1:
-                st.markdown("**Number Distribution**")
-                if 'linear' in stats and 'number' in stats['linear']:
-                    num_stats = stats['linear']['number']
-                    d50 = num_stats.get('D50_avg', 'N/A')
-                    span = num_stats.get('span_avg', 'N/A')
-                    st.write(f"D50: {d50:.2f} nm" if isinstance(d50, (int, float)) else f"D50: {d50}")
-                    st.write(f"Span: {span:.3f}" if isinstance(span, (int, float)) else f"Span: {span}")
-                else:
-                    st.write("No statistics available")
-            
-            # Surface area distribution
-            with col2:
-                st.markdown("**Surface Area Distribution**")
-                if 'linear' in stats and 'surface_area' in stats['linear']:
-                    surf_stats = stats['linear']['surface_area']
-                    d50 = surf_stats.get('D50_avg', 'N/A')
-                    span = surf_stats.get('span_avg', 'N/A')
-                    st.write(f"D50: {d50:.2f} nm" if isinstance(d50, (int, float)) else f"D50: {d50}")
-                    st.write(f"Span: {span:.3f}" if isinstance(span, (int, float)) else f"Span: {span}")
-                else:
-                    st.write("No statistics available")
-            
-            # Volume distribution
-            with col3:
-                st.markdown("**Volume Distribution**")
-                if 'linear' in stats and 'volume' in stats['linear']:
-                    vol_stats = stats['linear']['volume']
-                    d50 = vol_stats.get('D50_avg', 'N/A')
-                    span = vol_stats.get('span_avg', 'N/A')
-                    st.write(f"D50: {d50:.2f} nm" if isinstance(d50, (int, float)) else f"D50: {d50}")
-                    st.write(f"Span: {span:.3f}" if isinstance(span, (int, float)) else f"Span: {span}")
-                else:
-                    st.write("No statistics available")
-        
-        st.markdown("---")
-        st.subheader("📋 Sample Information")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.write(f"**Experimenter:** {st.session_state.experimenter}")
-            st.write(f"**Project:** {st.session_state.project}")
-            st.write(f"**Location:** {st.session_state.location}")
-        
-        with col2:
-            st.write(f"**PI:** {st.session_state.pi}")
-            num_files = st.session_state.metadata.get('num_replicates', 'N/A')
-            st.write(f"**Num Files:** {num_files}")
-            dilution_val = st.session_state.metadata.get('nta_dilution', 'N/A')
-            st.write(f"**Dilution Factor:** {dilution_val}")
+                st.metric("Span", "N/A")
     
     # DISTRIBUTIONS TAB
     with tab_distributions:
@@ -773,10 +770,13 @@ else:
     ## How to use:
     
     1. **Upload files** - Use the sidebar to upload one or more NTA .txt files
-    2. **Enter metadata** - Customize experimenter, project, and sample information
-    3. **Run analysis** - Click the 'RUN ANALYSIS' button to process your data
-    4. **View results** - Check the Summary, Distributions, and Statistics tabs
-    5. **Generate plots** - Go to the Plots tab to create visualizations
-    6. **Download** - Export results as TSV data files, PDF plots, and fit parameters
-    7. **Package** - Download everything as ZIP
+    2. **Select research focus** - Choose whether you're interested in number, surface area, or volume distributions
+    3. **Enter optional metadata** - Optionally add experimenter, project, location, and PI information (not required)
+    4. **Run analysis** - Click the 'RUN ANALYSIS' button to process your data
+    5. **View results** - Summary tab shows your selected focus; check Distributions and Statistics tabs for all data
+    6. **Generate plots** - Go to the Plots tab to create visualizations
+    7. **Download** - Export results as TSV data files, PDF plots, and fit parameters
+    8. **Package** - Download everything as ZIP
+    
+    **Note:** User metadata is completely optional - just check the box if you want to add it.
     """)
