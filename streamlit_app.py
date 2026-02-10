@@ -475,7 +475,9 @@ if st.session_state.analysis_complete:
         # Display research focus prominently
         st.markdown(f"### {focus_emoji} {research_focus.split('(')[0].strip()}")
         
-        # Display plot
+        # Display plot - with auto-refresh
+        plot_placeholder = st.empty()
+        
         if st.session_state.plot_output_dir:
             from pathlib import Path
             from PIL import Image
@@ -496,13 +498,16 @@ if st.session_state.analysis_complete:
             if plot_files:
                 try:
                     img = Image.open(plot_files[0])
-                    st.image(img, use_column_width=True)
+                    plot_placeholder.image(img, use_column_width=True)
                 except Exception as e:
-                    st.warning(f"Could not load plot image: {str(e)}")
+                    plot_placeholder.warning(f"Could not load plot image: {str(e)}")
             else:
-                st.info("Plot image will be available once plot generation completes.")
+                plot_placeholder.info("📊 Plot image is being generated... The visualization will appear here once plot generation completes. This typically takes a few seconds.\n\n💡 You can also view all plots in the **Plots** tab.")
+                # Add a refresh button to manually check for plots
+                if st.button("🔄 Check for Plot", key="refresh_plot"):
+                    st.rerun()
         else:
-            st.info("Plots will be generated after analysis.")
+            plot_placeholder.info("📊 Plots will be generated after analysis completes.")
         
         st.markdown("---")
         
@@ -613,18 +618,154 @@ if st.session_state.analysis_complete:
         
         st.markdown("---")
         
-        # Additional metrics section
-        st.markdown("### 📊 Additional Information")
+        # Quality Control Section
+        st.markdown("### ✅ Quality Control")
         
-        col_add1, col_add2 = st.columns(2)
+        metadata = st.session_state.metadata
         
-        with col_add1:
-            num_files = st.session_state.metadata.get('num_replicates', 'N/A')
+        # Function to get QC status
+        def get_qc_status(value, expected=None, check_type='equals'):
+            if value == 'N/A' or value is None:
+                return "⚠️ Unknown", "#ff9800"  # Orange
+            
+            if check_type == 'equals':
+                if isinstance(value, str):
+                    value_lower = str(value).lower()
+                    if 'good' in value_lower or 'ok' in value_lower or 'pass' in value_lower:
+                        return "✅ Good", "#4CAF50"  # Green
+                    elif 'bad' in value_lower or 'fail' in value_lower or 'error' in value_lower:
+                        return "❌ Failed", "#F44336"  # Red
+                    else:
+                        return f"⚠️ {value}", "#ff9800"  # Orange
+            return "⚠️ Unknown", "#ff9800"
+        
+        # QC Metrics
+        qc_col1, qc_col2, qc_col3, qc_col4 = st.columns(4)
+        
+        # Cell Check
+        with qc_col1:
+            cell_check = metadata.get('nta_cell_check_result', 'N/A')
+            status, color = get_qc_status(cell_check)
+            st.markdown(f"""
+            <div style="background: {color}11; border-left: 4px solid {color}; padding: 15px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 12px; color: #666; margin-bottom: 8px;">Cell Check</div>
+                <div style="font-size: 16px; font-weight: bold; color: {color};">{status}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Particle Drift Check
+        with qc_col2:
+            drift_check = metadata.get('nta_particle_drift_check_result', 'N/A')
+            status, color = get_qc_status(drift_check)
+            st.markdown(f"""
+            <div style="background: {color}11; border-left: 4px solid {color}; padding: 15px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 12px; color: #666; margin-bottom: 8px;">Drift Check</div>
+                <div style="font-size: 16px; font-weight: bold; color: {color};">{status}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Temperature Stability
+        with qc_col3:
+            temp = metadata.get('nta_temperature', 'N/A')
+            if temp != 'N/A' and temp:
+                try:
+                    temp_val = float(str(temp).split('±')[0].strip())
+                    temp_sd = float(str(temp).split('±')[1].strip()) if '±' in str(temp) else 0
+                    if temp_sd < 1.0:
+                        status, color = "✅ Stable", "#4CAF50"
+                    elif temp_sd < 2.0:
+                        status, color = "⚠️ Drift", "#ff9800"
+                    else:
+                        status, color = "❌ Unstable", "#F44336"
+                except:
+                    status, color = "⚠️ Unknown", "#ff9800"
+            else:
+                status, color = "⚠️ N/A", "#ff9800"
+            
+            st.markdown(f"""
+            <div style="background: {color}11; border-left: 4px solid {color}; padding: 15px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 12px; color: #666; margin-bottom: 8px;">Temperature</div>
+                <div style="font-size: 16px; font-weight: bold; color: {color};">{status}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Total Tracks (threshold: 500 tracks minimum for good quality)
+        with qc_col4:
+            total_tracks = metadata.get('nta_number_of_traces_sum', 'N/A')
+            TRACKS_THRESHOLD = 500  # Minimum for good quality NTA analysis
+            
+            if total_tracks != 'N/A' and total_tracks:
+                try:
+                    tracks_val = int(float(total_tracks))
+                    if tracks_val >= TRACKS_THRESHOLD:
+                        status, color = "✅ Good", "#4CAF50"
+                    elif tracks_val >= 200:
+                        status, color = "⚠️ Marginal", "#ff9800"
+                    else:
+                        status, color = "❌ Low", "#F44336"
+                except:
+                    status, color = "⚠️ Unknown", "#ff9800"
+            else:
+                status, color = "⚠️ N/A", "#ff9800"
+            
+            st.markdown(f"""
+            <div style="background: {color}11; border-left: 4px solid {color}; padding: 15px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 12px; color: #666; margin-bottom: 8px;">Tracks ({TRACKS_THRESHOLD}+ required)</div>
+                <div style="font-size: 16px; font-weight: bold; color: {color};">{status}</div>
+                <div style="font-size: 11px; color: #999; margin-top: 5px;">
+                    {f'{tracks_val:,}' if total_tracks != 'N/A' and total_tracks else 'N/A'}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Sample Information Section
+        st.markdown("### 📋 Sample Information")
+        
+        sample_col1, sample_col2, sample_col3 = st.columns(3)
+        
+        with sample_col1:
+            sample = metadata.get('sample', 'N/A')
+            st.markdown(f"""
+            <div style="background: #f5f5f5; padding: 15px; border-radius: 8px;">
+                <div style="font-size: 12px; color: #666; margin-bottom: 8px; font-weight: 500;">Sample ID</div>
+                <div style="font-size: 14px; font-weight: bold; color: #333;">{sample}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with sample_col2:
+            electrolyte = metadata.get('nta_electrolyte', 'N/A')
+            st.markdown(f"""
+            <div style="background: #f5f5f5; padding: 15px; border-radius: 8px;">
+                <div style="font-size: 12px; color: #666; margin-bottom: 8px; font-weight: 500;">Buffer/Electrolyte</div>
+                <div style="font-size: 14px; font-weight: bold; color: #333;">{electrolyte}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with sample_col3:
+            temp_display = metadata.get('nta_temperature', 'N/A')
+            st.markdown(f"""
+            <div style="background: #f5f5f5; padding: 15px; border-radius: 8px;">
+                <div style="font-size: 12px; color: #666; margin-bottom: 8px; font-weight: 500;">Temperature</div>
+                <div style="font-size: 14px; font-weight: bold; color: #333;">{temp_display} °C</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Additional Analysis Information
+        st.markdown("### 📊 Analysis Details")
+        
+        detail_col1, detail_col2 = st.columns(2)
+        
+        with detail_col1:
+            num_files = metadata.get('num_replicates', 'N/A')
             st.metric("Replicates Analyzed", num_files)
         
-        with col_add2:
-            total_tracks = st.session_state.metadata.get('nta_number_of_traces_sum', 'N/A')
-            st.metric("Total Tracks Detected", total_tracks)
+        with detail_col2:
+            dilution = metadata.get('nta_dilution', 'N/A')
+            st.metric("Dilution Factor", dilution)
     
     # STATISTICS TAB
     with tab_statistics:
