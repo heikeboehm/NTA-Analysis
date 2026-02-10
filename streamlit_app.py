@@ -686,27 +686,38 @@ if st.session_state.analysis_complete:
         st.markdown("")  # Spacer
         
         # ---- SECTION 3: KEY METRICS (3 cards at end) ----
-        st.markdown("### 📈 Key Metrics")
+        metric_title_label = "Key Metrics - Number" if "Number" in research_focus else ("Key Metrics - Surface Area" if "Surface" in research_focus else "Key Metrics - Volume")
+        st.markdown(f"### 📈 {metric_title_label}")
         metric_col1, metric_col2, metric_col3 = st.columns(3, gap="small")
         
-        # Total metric card
+        # Total metric card (GREY BOX)
         with metric_col1:
             if total_metric_col in dist_df.columns:
                 linear_df = dist_df[dist_df['scale'] == 'linear']
                 total_val = linear_df[total_metric_col].sum() if not linear_df.empty else 0
-                value_text = f"{total_val:.2e}"
+                
+                # Calculate SD for the total metric
+                sd_col = total_metric_col.replace('_avg', '_sd')
+                if sd_col in linear_df.columns:
+                    total_sd = np.sqrt((linear_df[sd_col] ** 2).sum())
+                    value_text = f"{total_val:.2e}"
+                    sd_text = f"± {total_sd:.2e}"
+                else:
+                    value_text = f"{total_val:.2e}"
+                    sd_text = ""
             else:
                 value_text = "N/A"
+                sd_text = ""
             
             st.markdown(f"""
-            <div style="background: linear-gradient(135deg, {focus_color}22 0%, {focus_color}11 100%); border-left: 4px solid {focus_color}; padding: 13px; border-radius: 6px; text-align: center;">
+            <div style="background: #f5f5f5; border: 1px solid #e0e0e0; padding: 13px; border-radius: 6px; text-align: center;">
                 <div style="font-size: 12px; color: #666; margin-bottom: 7px; font-weight: 600;">{total_metric_label}</div>
-                <div style="font-size: 19px; font-weight: bold; color: {focus_color}; margin-bottom: 3px;">{value_text}</div>
-                <div style="font-size: 11px; color: #999;">{total_metric_unit}</div>
+                <div style="font-size: 19px; font-weight: bold; color: #333; margin-bottom: 3px;">{value_text}</div>
+                <div style="font-size: 11px; color: #999;">{total_metric_unit}{f'<br/>{sd_text}' if sd_text else ''}</div>
             </div>
             """, unsafe_allow_html=True)
         
-        # D50 card
+        # D50 card (GREY BOX)
         with metric_col2:
             d50_avg = "N/A"
             d50_ci = ""
@@ -721,14 +732,14 @@ if st.session_state.analysis_complete:
                         d50_ci = f"{d50_lower:.2f} – {d50_upper:.2f}"
             
             st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #1f77b422 0%, #1f77b411 100%); border-left: 4px solid #1f77b4; padding: 13px; border-radius: 6px; text-align: center;">
+            <div style="background: #f5f5f5; border: 1px solid #e0e0e0; padding: 13px; border-radius: 6px; text-align: center;">
                 <div style="font-size: 12px; color: #666; margin-bottom: 7px; font-weight: 600;">D50</div>
-                <div style="font-size: 19px; font-weight: bold; color: #1f77b4; margin-bottom: 3px;">{d50_avg}</div>
+                <div style="font-size: 19px; font-weight: bold; color: #333; margin-bottom: 3px;">{d50_avg}</div>
                 <div style="font-size: 11px; color: #999;">nm{f'<br/>{d50_ci}' if d50_ci else ''}</div>
             </div>
             """, unsafe_allow_html=True)
         
-        # Span card
+        # Span card (GREY BOX)
         with metric_col3:
             span_avg = "N/A"
             span_ci = ""
@@ -743,9 +754,9 @@ if st.session_state.analysis_complete:
                         span_ci = f"{span_lower:.2f} – {span_upper:.2f}"
             
             st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #ff7f0e22 0%, #ff7f0e11 100%); border-left: 4px solid #ff7f0e; padding: 13px; border-radius: 6px; text-align: center;">
+            <div style="background: #f5f5f5; border: 1px solid #e0e0e0; padding: 13px; border-radius: 6px; text-align: center;">
                 <div style="font-size: 12px; color: #666; margin-bottom: 7px; font-weight: 600;">Span</div>
-                <div style="font-size: 19px; font-weight: bold; color: #ff7f0e; margin-bottom: 3px;">{span_avg}</div>
+                <div style="font-size: 19px; font-weight: bold; color: #333; margin-bottom: 3px;">{span_avg}</div>
                 <div style="font-size: 11px; color: #999;">(dimensionless){f'<br/>{span_ci}' if span_ci else ''}</div>
             </div>
             """, unsafe_allow_html=True)
