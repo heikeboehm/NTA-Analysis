@@ -434,8 +434,8 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
 if st.session_state.analysis_complete:
     st.markdown("---")
     
-    tab_summary, tab_distributions, tab_statistics, tab_plots, tab_download = st.tabs(
-        ["📊 Summary", "📈 Distributions", "📉 Statistics", "📊 Plots", "📥 Download"]
+    tab_summary, tab_statistics, tab_plots, tab_download = st.tabs(
+        ["📊 Summary", "📉 Statistics", "📊 Plots", "📥 Download"]
     )
     
     # SUMMARY TAB
@@ -456,6 +456,8 @@ if st.session_state.analysis_complete:
             plot_col = 'number_normalized_avg'
             plot_err_col = 'number_normalized_sd'
             ylabel = "Normalized Number"
+            fit_color = '#4C5B5C'
+            metric_title = "Key metrics for particle number distribution"
         elif 'Surface area' in research_focus:
             dist_type = 'surface_area'
             total_metric_label = "Total Surface Area"
@@ -465,6 +467,8 @@ if st.session_state.analysis_complete:
             plot_col = 'area_nm^2_per_mL_avg'
             plot_err_col = 'area_nm^2_per_mL_sd'
             ylabel = "Surface Area (nm²/mL)"
+            fit_color = '#C45B5B'
+            metric_title = "Key metrics for surface area distribution"
         else:  # Internal volume
             dist_type = 'volume'
             total_metric_label = "Total Volume"
@@ -474,46 +478,83 @@ if st.session_state.analysis_complete:
             plot_col = 'volume_nm^3_per_mL_avg'
             plot_err_col = 'volume_nm^3_per_mL_sd'
             ylabel = "Volume (nm³/mL)"
+            fit_color = '#2C7F7F'
+            metric_title = "Key metrics for volume distribution"
         
-        # Display plot
+        # Display plot with fit curve
         linear_data = dist_df[(dist_df['scale'] == 'linear')].sort_values('size_nm')
         
         if not linear_data.empty and plot_col in linear_data.columns:
-            fig, ax = plt.subplots(figsize=(11, 5))
+            fig, ax = plt.subplots(figsize=(12, 6))
             
+            # Plot data bars
             ax.bar(linear_data['size_nm'], linear_data[plot_col], 
-                   color='#4C5B5C', alpha=0.7, edgecolor='black', linewidth=0.8)
+                   color=fit_color, alpha=0.7, edgecolor='black', linewidth=0.8, label='Measured Data')
             
-            # Add error bars if available
+            # Add error bars
             if plot_err_col in linear_data.columns:
                 ax.errorbar(linear_data['size_nm'], linear_data[plot_col],
                            yerr=linear_data[plot_err_col],
                            fmt='none', ecolor='black', capsize=3, alpha=0.5)
             
+            # Add lognormal fit curve if available
+            try:
+                from scipy.optimize import curve_fit
+                sizes = linear_data['size_nm'].values
+                weights = linear_data[plot_col].values
+                
+                def lognormal_pdf(x, mu, sigma, amplitude):
+                    return amplitude * (1 / (x * sigma * np.sqrt(2 * np.pi))) * \
+                           np.exp(-(np.log(x) - mu)**2 / (2 * sigma**2))
+                
+                valid_mask = (weights > 0) & (sizes > 0)
+                if np.sum(valid_mask) > 3:
+                    sizes_valid = sizes[valid_mask]
+                    weights_valid = weights[valid_mask]
+                    
+                    size_log = np.log(sizes_valid)
+                    mu_init = np.average(size_log, weights=weights_valid)
+                    sigma_init = np.sqrt(np.average((size_log - mu_init)**2, weights=weights_valid))
+                    amplitude_init = np.max(weights_valid) * sigma_init * np.sqrt(2 * np.pi) * np.exp(mu_init)
+                    
+                    params, _ = curve_fit(
+                        lognormal_pdf, sizes_valid, weights_valid,
+                        p0=[mu_init, sigma_init, amplitude_init],
+                        bounds=([0, 0, 0], [np.inf, np.inf, np.inf]),
+                        maxfev=10000
+                    )
+                    
+                    # Generate fitted curve
+                    x_fit = np.logspace(np.log10(sizes.min()), np.log10(sizes.max()), 300)
+                    y_fit = lognormal_pdf(x_fit, *params)
+                    ax.plot(x_fit, y_fit, color=fit_color, linewidth=2.5, label='Lognormal Fit', linestyle='--')
+            except:
+                pass
+            
             ax.set_xlabel('Size (nm)', fontsize=12, fontweight='bold')
             ax.set_ylabel(ylabel, fontsize=12, fontweight='bold')
             ax.set_title(plot_title, fontsize=13, fontweight='bold')
             ax.grid(axis='y', alpha=0.3)
+            ax.legend(fontsize=10)
             
             plt.tight_layout()
             st.pyplot(fig)
             plt.close(fig)
         
         st.markdown("---")
-        st.subheader("📊 Key Metrics")
+        st.subheader(f"📊 {metric_title}")
         
-        # Show total metric for the research focus
+        # Show metrics stacked vertically for readability
         col1, col2, col3 = st.columns(3)
         
         with col1:
             if total_metric_col in dist_df.columns:
                 linear_df = dist_df[dist_df['scale'] == 'linear']
                 total_val = linear_df[total_metric_col].sum() if not linear_df.empty else 0
-                st.metric(total_metric_label, f"{total_val:.2e} {total_metric_unit}")
+                st.metric(total_metric_label, f"{total_val:.2e}\n{total_metric_unit}")
             else:
                 st.metric(total_metric_label, "N/A")
         
-        # Show D50 with confidence interval
         with col2:
             if 'linear' in stats and dist_type in stats['linear']:
                 stat_dict = stats['linear'][dist_type]
@@ -522,13 +563,13 @@ if st.session_state.analysis_complete:
                 d50_upper = stat_dict.get('D50_upper', 'N/A')
                 
                 if isinstance(d50_avg, (int, float)):
-                    st.metric("D50", f"{d50_avg:.2f} nm\n({d50_lower:.2f} - {d50_upper:.2f})")
+                    st.metric("D50 (nm)", f"{d50_avg:.2f}")
+                    st.caption(f"(95% CI: {d50_lower:.2f} – {d50_upper:.2f})")
                 else:
-                    st.metric("D50", "N/A")
+                    st.metric("D50 (nm)", "N/A")
             else:
-                st.metric("D50", "N/A")
+                st.metric("D50 (nm)", "N/A")
         
-        # Show Span with confidence interval
         with col3:
             if 'linear' in stats and dist_type in stats['linear']:
                 stat_dict = stats['linear'][dist_type]
@@ -537,32 +578,12 @@ if st.session_state.analysis_complete:
                 span_upper = stat_dict.get('span_upper', 'N/A')
                 
                 if isinstance(span_avg, (int, float)):
-                    st.metric("Span", f"{span_avg:.2f}\n({span_lower:.2f} - {span_upper:.2f})")
+                    st.metric("Span", f"{span_avg:.2f}")
+                    st.caption(f"(95% CI: {span_lower:.2f} – {span_upper:.2f})")
                 else:
                     st.metric("Span", "N/A")
             else:
                 st.metric("Span", "N/A")
-    
-    # DISTRIBUTIONS TAB
-    with tab_distributions:
-        st.subheader("📊 Distribution Data Tables")
-        
-        dist_df = st.session_state.distribution_data
-        scale_filter = st.radio("Scale", ["linear", "logarithmic"], horizontal=True)
-        
-        filtered_df = dist_df[dist_df['scale'] == scale_filter].copy()
-        
-        if not filtered_df.empty:
-            display_cols = ['size_nm']
-            display_cols += [col for col in filtered_df.columns if '_avg' in col or '_sd' in col]
-            display_cols = [col for col in display_cols if col in filtered_df.columns]
-            
-            st.dataframe(
-                filtered_df[display_cols].sort_values('size_nm'),
-                use_container_width=True
-            )
-        else:
-            st.warning(f"No data available for {scale_filter} scale")
     
     # STATISTICS TAB
     with tab_statistics:
@@ -632,17 +653,40 @@ if st.session_state.analysis_complete:
     # PLOTS TAB
     with tab_plots:
         st.subheader("📊 Sophisticated Data Visualizations")
-        st.markdown("All plots have been generated automatically. Select which ones to view:")
+        
+        # Get research focus to auto-select appropriate plot
+        research_focus = st.session_state.get('research_focus', 'Number of particles (size distribution)')
+        if 'Number of particles' in research_focus:
+            default_focus_plot = 'number'
+        elif 'Surface area' in research_focus:
+            default_focus_plot = 'surface_area'
+        else:
+            default_focus_plot = 'volume'
+        
+        st.markdown(f"**Currently focused on:** {research_focus.split('(')[0].strip()}")
+        st.markdown("Select which plots to view (automatically selected plot is highlighted below):")
         
         if st.session_state.plot_output_dir is None or len(st.session_state.generated_plots) == 0:
             st.info("ℹ️ Plots will be generated automatically after analysis. Check back here after running the analysis!")
         else:
             # Define available plots
             plot_options = {
-                'number': ('📊 Number-Weighted Distribution', ['linear', 'logarithmic']),
+                'number': ('📊 Number-Weighted Distribution (Your Focus)', ['linear', 'logarithmic']),
                 'volume': ('📊 Volume-Weighted Distribution', ['linear', 'logarithmic']),
                 'surface_area': ('📊 Surface Area-Weighted Distribution', ['linear', 'logarithmic']),
             }
+            
+            # Update label for the focused plot
+            for key in plot_options:
+                if key == 'number':
+                    if default_focus_plot == 'number':
+                        plot_options[key] = ('📊 Number-Weighted Distribution ⭐ (Your Focus)', ['linear', 'logarithmic'])
+                elif key == 'surface_area':
+                    if default_focus_plot == 'surface_area':
+                        plot_options[key] = ('📊 Surface Area-Weighted Distribution ⭐ (Your Focus)', ['linear', 'logarithmic'])
+                elif key == 'volume':
+                    if default_focus_plot == 'volume':
+                        plot_options[key] = ('📊 Volume-Weighted Distribution ⭐ (Your Focus)', ['linear', 'logarithmic'])
             
             # Create columns for selection
             st.markdown("**Select plots to display:**")
@@ -652,7 +696,9 @@ if st.session_state.analysis_complete:
             for idx, (plot_key, (plot_label, scales)) in enumerate(plot_options.items()):
                 col = [col1, col2, col3][idx % 3]
                 with col:
-                    selected_plots[plot_key] = st.checkbox(plot_label, value=(idx < 2))
+                    # Auto-select the focused plot, others default to unchecked
+                    is_default = (plot_key == default_focus_plot)
+                    selected_plots[plot_key] = st.checkbox(plot_label, value=is_default)
             
             st.markdown("---")
             
@@ -678,7 +724,7 @@ if st.session_state.analysis_complete:
                     plot_files = sorted(output_path.glob(search_pattern))
                     
                     if plot_files:
-                        with st.expander(plot_label, expanded=(displayed_count < 2)):
+                        with st.expander(plot_label, expanded=(displayed_count < 1)):
                             for plot_file in plot_files:
                                 try:
                                     img = Image.open(plot_file)
@@ -773,8 +819,8 @@ else:
     2. **Select research focus** - Choose whether you're interested in number, surface area, or volume distributions
     3. **Enter optional metadata** - Optionally add experimenter, project, location, and PI information (not required)
     4. **Run analysis** - Click the 'RUN ANALYSIS' button to process your data
-    5. **View results** - Summary tab shows your selected focus; check Distributions and Statistics tabs for all data
-    6. **Generate plots** - Go to the Plots tab to create visualizations
+    5. **View results** - Summary tab shows your selected focus; check Statistics tab for all detailed data
+    6. **Explore plots** - The Plots tab automatically shows your focused plot, but you can view all others too
     7. **Download** - Export results as TSV data files, PDF plots, and fit parameters
     8. **Package** - Download everything as ZIP
     
