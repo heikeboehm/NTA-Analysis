@@ -474,116 +474,218 @@ if st.session_state.analysis_complete:
         
 
         
-        # Key metrics section with enhanced styling
-        st.markdown(f"### 📈 Key Metrics")
         
-        # Create metric cards
-        col1, col2, col3 = st.columns(3, gap="large")
+        # ============================================================================
+        # REORDERED COMPACT ELEGANT SUMMARY TAB
+        # Order: Sample & Measurement → Quality Control → Key Metrics
+        # ============================================================================
         
-        # Total metric card
-        with col1:
+        metadata = st.session_state.metadata
+        
+        # ---- SECTION 1: SAMPLE & MEASUREMENT (4 cards) ----
+        st.markdown("### 📋 Sample & Measurement")
+        
+        sample_col1, sample_col2, sample_col3, sample_col4 = st.columns(4, gap="small")
+        
+        with sample_col1:
+            sample = metadata.get('sample', 'N/A')
             st.markdown(f"""
-            <div style="
-                background: linear-gradient(135deg, {focus_color}22 0%, {focus_color}11 100%);
-                border-left: 4px solid {focus_color};
-                padding: 20px;
-                border-radius: 8px;
-                text-align: center;
-            ">
-                <div style="font-size: 14px; color: #666; margin-bottom: 10px; font-weight: 500;">
-                    {total_metric_label}
-                </div>
-                <div style="font-size: 28px; font-weight: bold; color: {focus_color}; margin-bottom: 5px;">
-            """, unsafe_allow_html=True)
-            
-            if total_metric_col in dist_df.columns:
-                linear_df = dist_df[dist_df['scale'] == 'linear']
-                total_val = linear_df[total_metric_col].sum() if not linear_df.empty else 0
-                st.write(f"**{total_val:.2e}**")
-            else:
-                st.write("**N/A**")
-            
-            st.markdown(f"""
-                </div>
-                <div style="font-size: 12px; color: #999;">
-                    {total_metric_unit}
-                </div>
+            <div style="background: #f9f9f9; padding: 11px; border-radius: 6px; border: 1px solid #e0e0e0;">
+                <div style="font-size: 11px; color: #666; margin-bottom: 6px; font-weight: 600;">Sample ID</div>
+                <div style="font-size: 14px; font-weight: bold; color: #333;">{sample}</div>
             </div>
             """, unsafe_allow_html=True)
         
-        # D50 card
-        with col2:
-            d50_avg = "N/A"
-            d50_ci = ""
-            if 'linear' in stats and dist_type in stats['linear']:
-                stat_dict = stats['linear'][dist_type]
-                d50_val = stat_dict.get('D50_avg', 'N/A')
-                if isinstance(d50_val, (int, float)):
-                    d50_avg = f"{d50_val:.2f}"
-                    d50_lower = stat_dict.get('D50_lower', 'N/A')
-                    d50_upper = stat_dict.get('D50_upper', 'N/A')
-                    if isinstance(d50_lower, (int, float)) and isinstance(d50_upper, (int, float)):
-                        d50_ci = f"95% CI: {d50_lower:.2f} – {d50_upper:.2f}"
-            
+        with sample_col2:
+            electrolyte = metadata.get('electrolyte', metadata.get('nta_electrolyte', 'N/A'))
             st.markdown(f"""
-            <div style="
-                background: linear-gradient(135deg, #1f77b422 0%, #1f77b411 100%);
-                border-left: 4px solid #1f77b4;
-                padding: 20px;
-                border-radius: 8px;
-                text-align: center;
-            ">
-                <div style="font-size: 14px; color: #666; margin-bottom: 10px; font-weight: 500;">
-                    Median Size (D50)
-                </div>
-                <div style="font-size: 28px; font-weight: bold; color: #1f77b4; margin-bottom: 5px;">
-                    {d50_avg}
-                </div>
-                <div style="font-size: 11px; color: #999; line-height: 1.6;">
-                    nm<br/>{d50_ci}
-                </div>
+            <div style="background: #f9f9f9; padding: 11px; border-radius: 6px; border: 1px solid #e0e0e0;">
+                <div style="font-size: 11px; color: #666; margin-bottom: 6px; font-weight: 600;">Buffer</div>
+                <div style="font-size: 14px; font-weight: bold; color: #333;">{electrolyte}</div>
             </div>
             """, unsafe_allow_html=True)
         
-        # Span card
-        with col3:
-            span_avg = "N/A"
-            span_ci = ""
-            if 'linear' in stats and dist_type in stats['linear']:
-                stat_dict = stats['linear'][dist_type]
-                span_val = stat_dict.get('span_avg', 'N/A')
-                if isinstance(span_val, (int, float)):
-                    span_avg = f"{span_val:.2f}"
-                    span_lower = stat_dict.get('span_lower', 'N/A')
-                    span_upper = stat_dict.get('span_upper', 'N/A')
-                    if isinstance(span_lower, (int, float)) and isinstance(span_upper, (int, float)):
-                        span_ci = f"95% CI: {span_lower:.2f} – {span_upper:.2f}"
-            
+        with sample_col3:
+            temp_display = metadata.get('nta_temperature', 'N/A')
+            if temp_display != 'N/A' and temp_display:
+                temp_display = str(temp_display).replace('Â', '')
             st.markdown(f"""
-            <div style="
-                background: linear-gradient(135deg, #ff7f0e22 0%, #ff7f0e11 100%);
-                border-left: 4px solid #ff7f0e;
-                padding: 20px;
-                border-radius: 8px;
-                text-align: center;
-            ">
-                <div style="font-size: 14px; color: #666; margin-bottom: 10px; font-weight: 500;">
-                    Distribution Width (Span)
-                </div>
-                <div style="font-size: 28px; font-weight: bold; color: #ff7f0e; margin-bottom: 5px;">
-                    {span_avg}
-                </div>
-                <div style="font-size: 11px; color: #999; line-height: 1.6;">
-                    (dimensionless)<br/>{span_ci}
-                </div>
+            <div style="background: #f9f9f9; padding: 11px; border-radius: 6px; border: 1px solid #e0e0e0;">
+                <div style="font-size: 11px; color: #666; margin-bottom: 6px; font-weight: 600;">Temperature</div>
+                <div style="font-size: 14px; font-weight: bold; color: #333;">{temp_display}</div>
             </div>
             """, unsafe_allow_html=True)
         
-        st.markdown("---")
+        with sample_col4:
+            dilution = metadata.get('nta_dilution', 'N/A')
+            st.markdown(f"""
+            <div style="background: #f9f9f9; padding: 11px; border-radius: 6px; border: 1px solid #e0e0e0;">
+                <div style="font-size: 11px; color: #666; margin-bottom: 6px; font-weight: 600;">Dilution</div>
+                <div style="font-size: 14px; font-weight: bold; color: #333;">{dilution}</div>
+            </div>
+            """, unsafe_allow_html=True)
         
-        # COMPACT ELEGANT SUMMARY TAB DESIGN
+        st.markdown("")  # Spacer
         
-        # Key Metrics (3 cards, smaller)
+        # ---- SECTION 2: QUALITY CONTROL (Dynamic symbol + 2 rows) ----
+        
+        # Collect all QC results to determine overall status
+        def get_qc_status(value, check_type='equals'):
+            if value == 'N/A' or value is None:
+                return "⚠️ Unknown", "#ff9800"
+            if check_type == 'equals':
+                if isinstance(value, str):
+                    value_lower = str(value).lower()
+                    if 'good' in value_lower or 'ok' in value_lower or 'pass' in value_lower:
+                        return "✅ Good", "#4CAF50"
+                    elif 'bad' in value_lower or 'fail' in value_lower or 'error' in value_lower:
+                        return "❌ Failed", "#F44336"
+                    else:
+                        return f"⚠️ {value}", "#ff9800"
+            return "⚠️ Unknown", "#ff9800"
+        
+        # Get all QC statuses
+        qc_results = []
+        
+        # Cell Check
+        cell_check = metadata.get('nta_cell_check_result', 'N/A')
+        cell_status, cell_color = get_qc_status(cell_check)
+        qc_results.append((cell_status, cell_color))
+        
+        # Drift Check
+        drift_check = metadata.get('nta_particle_drift_check_result', 'N/A')
+        drift_status, drift_color = get_qc_status(drift_check)
+        qc_results.append((drift_status, drift_color))
+        
+        # Temperature
+        temp = metadata.get('nta_temperature', 'N/A')
+        temp_sd = None
+        if temp != 'N/A' and temp:
+            try:
+                temp_str = str(temp).replace('Â', '')
+                if '±' in temp_str:
+                    parts = temp_str.split('±')
+                    temp_sd = float(parts[1].strip())
+                    if temp_sd < 0.5:
+                        temp_status, temp_color = "✅ Stable", "#4CAF50"
+                    elif temp_sd < 1.0:
+                        temp_status, temp_color = "⚠️ Drift", "#ff9800"
+                    else:
+                        temp_status, temp_color = "❌ Unstable", "#F44336"
+                else:
+                    temp_status, temp_color = "⚠️ Unknown", "#ff9800"
+            except:
+                temp_status, temp_color = "⚠️ Unknown", "#ff9800"
+        else:
+            temp_status, temp_color = "⚠️ N/A", "#ff9800"
+        qc_results.append((temp_status, temp_color))
+        
+        # Tracks
+        total_tracks = metadata.get('nta_number_of_traces_sum', 'N/A')
+        TRACKS_THRESHOLD = 500
+        tracks_val = 0
+        if total_tracks != 'N/A' and total_tracks:
+            try:
+                tracks_val = int(float(total_tracks))
+                if tracks_val >= TRACKS_THRESHOLD:
+                    tracks_status, tracks_color = "✅ Good", "#4CAF50"
+                elif tracks_val >= 200:
+                    tracks_status, tracks_color = "⚠️ Low", "#ff9800"
+                else:
+                    tracks_status, tracks_color = "❌ Poor", "#F44336"
+            except:
+                tracks_status, tracks_color = "⚠️ Unknown", "#ff9800"
+        else:
+            tracks_status, tracks_color = "⚠️ N/A", "#ff9800"
+        qc_results.append((tracks_status, tracks_color))
+        
+        # Replicates
+        num_replicates = metadata.get('num_replicates', 'N/A')
+        rep_val = 0
+        if num_replicates != 'N/A' and num_replicates:
+            try:
+                rep_val = int(num_replicates)
+                if rep_val >= 3:
+                    rep_status, rep_color = "✅ Good", "#4CAF50"
+                elif rep_val >= 2:
+                    rep_status, rep_color = "⚠️ Few", "#ff9800"
+                else:
+                    rep_status, rep_color = "❌ Single", "#F44336"
+            except:
+                rep_status, rep_color = "⚠️ Unknown", "#ff9800"
+        else:
+            rep_status, rep_color = "⚠️ N/A", "#ff9800"
+        qc_results.append((rep_status, rep_color))
+        
+        # Determine overall QC symbol
+        has_red = any(color == "#F44336" for _, color in qc_results)
+        has_orange = any(color == "#ff9800" for _, color in qc_results)
+        
+        if has_red:
+            qc_symbol = "⚠️"  # Warning if any red
+        elif has_orange:
+            qc_symbol = "⚠️"  # Warning if any orange
+        else:
+            qc_symbol = "✅"  # Green checkmark only if all good
+        
+        st.markdown(f"### {qc_symbol} Quality Control")
+        
+        # Row 1: Cell, Drift, Temperature
+        qc_row1_col1, qc_row1_col2, qc_row1_col3 = st.columns(3, gap="small")
+        
+        with qc_row1_col1:
+            st.markdown(f"""
+            <div style="background: {cell_color}11; border-left: 3px solid {cell_color}; padding: 13px; border-radius: 6px; text-align: center;">
+                <div style="color: #666; margin-bottom: 6px; font-weight: 600; font-size: 12px;">Cell Check</div>
+                <div style="font-weight: bold; color: {cell_color}; font-size: 15px;">{cell_status}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with qc_row1_col2:
+            st.markdown(f"""
+            <div style="background: {drift_color}11; border-left: 3px solid {drift_color}; padding: 13px; border-radius: 6px; text-align: center;">
+                <div style="color: #666; margin-bottom: 6px; font-weight: 600; font-size: 12px;">Drift Check</div>
+                <div style="font-weight: bold; color: {drift_color}; font-size: 15px;">{drift_status}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with qc_row1_col3:
+            st.markdown(f"""
+            <div style="background: {temp_color}11; border-left: 3px solid {temp_color}; padding: 13px; border-radius: 6px; text-align: center;">
+                <div style="color: #666; margin-bottom: 6px; font-weight: 600; font-size: 12px;">Temperature</div>
+                <div style="font-weight: bold; color: {temp_color}; font-size: 15px;">{temp_status}</div>
+                {f'<div style="font-size: 11px; color: #999; margin-top: 4px;">±{temp_sd:.2f}°C</div>' if temp_sd is not None else ''}
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Row 2: Tracks, Replicates, (empty)
+        qc_row2_col1, qc_row2_col2, qc_row2_col3 = st.columns(3, gap="small")
+        
+        with qc_row2_col1:
+            st.markdown(f"""
+            <div style="background: {tracks_color}11; border-left: 3px solid {tracks_color}; padding: 13px; border-radius: 6px; text-align: center;">
+                <div style="color: #666; margin-bottom: 6px; font-weight: 600; font-size: 12px;">Total Tracks</div>
+                <div style="font-weight: bold; color: {tracks_color}; font-size: 15px;">{tracks_status}</div>
+                {f'<div style="font-size: 11px; color: #999; margin-top: 4px;">{tracks_val:,}</div>' if total_tracks != 'N/A' and total_tracks else ''}
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with qc_row2_col2:
+            st.markdown(f"""
+            <div style="background: {rep_color}11; border-left: 3px solid {rep_color}; padding: 13px; border-radius: 6px; text-align: center;">
+                <div style="color: #666; margin-bottom: 6px; font-weight: 600; font-size: 12px;">Replicates</div>
+                <div style="font-weight: bold; color: {rep_color}; font-size: 15px;">{rep_status}</div>
+                {f'<div style="font-size: 11px; color: #999; margin-top: 4px;">{rep_val} files</div>' if num_replicates != 'N/A' and num_replicates else ''}
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with qc_row2_col3:
+            # Empty for alignment
+            pass
+        
+        st.markdown("")  # Spacer
+        
+        # ---- SECTION 3: KEY METRICS (3 cards at end) ----
         st.markdown("### 📈 Key Metrics")
         metric_col1, metric_col2, metric_col3 = st.columns(3, gap="small")
         
@@ -597,10 +699,10 @@ if st.session_state.analysis_complete:
                 value_text = "N/A"
             
             st.markdown(f"""
-            <div style="background: linear-gradient(135deg, {focus_color}22 0%, {focus_color}11 100%); border-left: 4px solid {focus_color}; padding: 12px; border-radius: 6px; text-align: center;">
-                <div style="font-size: 11px; color: #666; margin-bottom: 6px; font-weight: 500;">{total_metric_label}</div>
-                <div style="font-size: 18px; font-weight: bold; color: {focus_color};">{value_text}</div>
-                <div style="font-size: 10px; color: #999;">{total_metric_unit}</div>
+            <div style="background: linear-gradient(135deg, {focus_color}22 0%, {focus_color}11 100%); border-left: 4px solid {focus_color}; padding: 13px; border-radius: 6px; text-align: center;">
+                <div style="font-size: 12px; color: #666; margin-bottom: 7px; font-weight: 600;">{total_metric_label}</div>
+                <div style="font-size: 19px; font-weight: bold; color: {focus_color}; margin-bottom: 3px;">{value_text}</div>
+                <div style="font-size: 11px; color: #999;">{total_metric_unit}</div>
             </div>
             """, unsafe_allow_html=True)
         
@@ -619,10 +721,10 @@ if st.session_state.analysis_complete:
                         d50_ci = f"{d50_lower:.2f} – {d50_upper:.2f}"
             
             st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #1f77b422 0%, #1f77b411 100%); border-left: 4px solid #1f77b4; padding: 12px; border-radius: 6px; text-align: center;">
-                <div style="font-size: 11px; color: #666; margin-bottom: 6px; font-weight: 500;">D50</div>
-                <div style="font-size: 18px; font-weight: bold; color: #1f77b4;">{d50_avg}</div>
-                <div style="font-size: 10px; color: #999;">nm{f'<br/>{d50_ci}' if d50_ci else ''}</div>
+            <div style="background: linear-gradient(135deg, #1f77b422 0%, #1f77b411 100%); border-left: 4px solid #1f77b4; padding: 13px; border-radius: 6px; text-align: center;">
+                <div style="font-size: 12px; color: #666; margin-bottom: 7px; font-weight: 600;">D50</div>
+                <div style="font-size: 19px; font-weight: bold; color: #1f77b4; margin-bottom: 3px;">{d50_avg}</div>
+                <div style="font-size: 11px; color: #999;">nm{f'<br/>{d50_ci}' if d50_ci else ''}</div>
             </div>
             """, unsafe_allow_html=True)
         
@@ -641,188 +743,12 @@ if st.session_state.analysis_complete:
                         span_ci = f"{span_lower:.2f} – {span_upper:.2f}"
             
             st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #ff7f0e22 0%, #ff7f0e11 100%); border-left: 4px solid #ff7f0e; padding: 12px; border-radius: 6px; text-align: center;">
-                <div style="font-size: 11px; color: #666; margin-bottom: 6px; font-weight: 500;">Span</div>
-                <div style="font-size: 18px; font-weight: bold; color: #ff7f0e;">{span_avg}</div>
-                <div style="font-size: 10px; color: #999;">(dimensionless){f'<br/>{span_ci}' if span_ci else ''}</div>
+            <div style="background: linear-gradient(135deg, #ff7f0e22 0%, #ff7f0e11 100%); border-left: 4px solid #ff7f0e; padding: 13px; border-radius: 6px; text-align: center;">
+                <div style="font-size: 12px; color: #666; margin-bottom: 7px; font-weight: 600;">Span</div>
+                <div style="font-size: 19px; font-weight: bold; color: #ff7f0e; margin-bottom: 3px;">{span_avg}</div>
+                <div style="font-size: 11px; color: #999;">(dimensionless){f'<br/>{span_ci}' if span_ci else ''}</div>
             </div>
             """, unsafe_allow_html=True)
-        
-        st.markdown("")  # Spacer
-        
-        # Quality Control (5 compact cards)
-        st.markdown("### ✅ Quality Control")
-        
-        metadata = st.session_state.metadata
-        
-        def get_qc_status(value, expected=None, check_type='equals'):
-            if value == 'N/A' or value is None:
-                return "⚠️ Unknown", "#ff9800"
-            if check_type == 'equals':
-                if isinstance(value, str):
-                    value_lower = str(value).lower()
-                    if 'good' in value_lower or 'ok' in value_lower or 'pass' in value_lower:
-                        return "✅ Good", "#4CAF50"
-                    elif 'bad' in value_lower or 'fail' in value_lower or 'error' in value_lower:
-                        return "❌ Failed", "#F44336"
-                    else:
-                        return f"⚠️ {value}", "#ff9800"
-            return "⚠️ Unknown", "#ff9800"
-        
-        qc_col1, qc_col2, qc_col3, qc_col4, qc_col5 = st.columns(5, gap="small")
-        
-        # Cell Check
-        with qc_col1:
-            cell_check = metadata.get('nta_cell_check_result', 'N/A')
-            status, color = get_qc_status(cell_check)
-            st.markdown(f"""
-            <div style="background: {color}11; border-left: 3px solid {color}; padding: 10px; border-radius: 6px; text-align: center; font-size: 12px;">
-                <div style="color: #666; margin-bottom: 5px; font-weight: 500; font-size: 10px;">Cell</div>
-                <div style="font-weight: bold; color: {color};">{status}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Drift Check
-        with qc_col2:
-            drift_check = metadata.get('nta_particle_drift_check_result', 'N/A')
-            status, color = get_qc_status(drift_check)
-            st.markdown(f"""
-            <div style="background: {color}11; border-left: 3px solid {color}; padding: 10px; border-radius: 6px; text-align: center; font-size: 12px;">
-                <div style="color: #666; margin-bottom: 5px; font-weight: 500; font-size: 10px;">Drift</div>
-                <div style="font-weight: bold; color: {color};">{status}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Temperature Stability
-        with qc_col3:
-            temp = metadata.get('nta_temperature', 'N/A')
-            temp_sd = None
-            
-            if temp != 'N/A' and temp:
-                try:
-                    temp_str = str(temp).replace('Â', '')
-                    if '±' in temp_str:
-                        parts = temp_str.split('±')
-                        temp_sd = float(parts[1].strip())
-                        if temp_sd < 0.5:
-                            status, color = "✅ Stable", "#4CAF50"
-                        elif temp_sd < 1.0:
-                            status, color = "⚠️ Drift", "#ff9800"
-                        else:
-                            status, color = "❌ Unstable", "#F44336"
-                    else:
-                        status, color = "⚠️ Unknown", "#ff9800"
-                except:
-                    status, color = "⚠️ Unknown", "#ff9800"
-            else:
-                status, color = "⚠️ N/A", "#ff9800"
-            
-            st.markdown(f"""
-            <div style="background: {color}11; border-left: 3px solid {color}; padding: 10px; border-radius: 6px; text-align: center; font-size: 12px;">
-                <div style="color: #666; margin-bottom: 5px; font-weight: 500; font-size: 10px;">Temp</div>
-                <div style="font-weight: bold; color: {color};">{status}</div>
-                {f'<div style="font-size: 9px; color: #999; margin-top: 3px;">±{temp_sd:.2f}°C</div>' if temp_sd is not None else ''}
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Total Tracks
-        with qc_col4:
-            total_tracks = metadata.get('nta_number_of_traces_sum', 'N/A')
-            TRACKS_THRESHOLD = 500
-            
-            if total_tracks != 'N/A' and total_tracks:
-                try:
-                    tracks_val = int(float(total_tracks))
-                    if tracks_val >= TRACKS_THRESHOLD:
-                        status, color = "✅ Good", "#4CAF50"
-                    elif tracks_val >= 200:
-                        status, color = "⚠️ Low", "#ff9800"
-                    else:
-                        status, color = "❌ Poor", "#F44336"
-                except:
-                    status, color = "⚠️ Unknown", "#ff9800"
-            else:
-                status, color = "⚠️ N/A", "#ff9800"
-            
-            st.markdown(f"""
-            <div style="background: {color}11; border-left: 3px solid {color}; padding: 10px; border-radius: 6px; text-align: center; font-size: 12px;">
-                <div style="color: #666; margin-bottom: 5px; font-weight: 500; font-size: 10px;">Tracks</div>
-                <div style="font-weight: bold; color: {color};">{status}</div>
-                {f'<div style="font-size: 9px; color: #999; margin-top: 3px;">{tracks_val:,}</div>' if total_tracks != 'N/A' and total_tracks else ''}
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Replicates
-        with qc_col5:
-            num_replicates = metadata.get('num_replicates', 'N/A')
-            
-            if num_replicates != 'N/A' and num_replicates:
-                try:
-                    rep_val = int(num_replicates)
-                    if rep_val >= 3:
-                        status, color = "✅ Good", "#4CAF50"
-                    elif rep_val >= 2:
-                        status, color = "⚠️ Few", "#ff9800"
-                    else:
-                        status, color = "❌ Single", "#F44336"
-                except:
-                    status, color = "⚠️ Unknown", "#ff9800"
-            else:
-                status, color = "⚠️ N/A", "#ff9800"
-            
-            st.markdown(f"""
-            <div style="background: {color}11; border-left: 3px solid {color}; padding: 10px; border-radius: 6px; text-align: center; font-size: 12px;">
-                <div style="color: #666; margin-bottom: 5px; font-weight: 500; font-size: 10px;">Replicates</div>
-                <div style="font-weight: bold; color: {color};">{status}</div>
-                {f'<div style="font-size: 9px; color: #999; margin-top: 3px;">{rep_val} files</div>' if num_replicates != 'N/A' and num_replicates else ''}
-            </div>
-            """, unsafe_allow_html=True)
-        
-        st.markdown("")  # Spacer
-        
-        # Sample Information (4 compact cards)
-        st.markdown("### 📋 Sample & Measurement")
-        
-        sample_col1, sample_col2, sample_col3, sample_col4 = st.columns(4, gap="small")
-        
-        with sample_col1:
-            sample = metadata.get('sample', 'N/A')
-            st.markdown(f"""
-            <div style="background: #f9f9f9; padding: 10px; border-radius: 6px; border: 1px solid #e0e0e0;">
-                <div style="font-size: 10px; color: #666; margin-bottom: 5px; font-weight: 500;">Sample ID</div>
-                <div style="font-size: 13px; font-weight: bold; color: #333;">{sample}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with sample_col2:
-            electrolyte = metadata.get('electrolyte', metadata.get('nta_electrolyte', 'N/A'))
-            st.markdown(f"""
-            <div style="background: #f9f9f9; padding: 10px; border-radius: 6px; border: 1px solid #e0e0e0;">
-                <div style="font-size: 10px; color: #666; margin-bottom: 5px; font-weight: 500;">Buffer</div>
-                <div style="font-size: 13px; font-weight: bold; color: #333;">{electrolyte}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with sample_col3:
-            temp_display = metadata.get('nta_temperature', 'N/A')
-            if temp_display != 'N/A' and temp_display:
-                temp_display = str(temp_display).replace('Â', '')
-            st.markdown(f"""
-            <div style="background: #f9f9f9; padding: 10px; border-radius: 6px; border: 1px solid #e0e0e0;">
-                <div style="font-size: 10px; color: #666; margin-bottom: 5px; font-weight: 500;">Temperature</div>
-                <div style="font-size: 13px; font-weight: bold; color: #333;">{temp_display}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with sample_col4:
-            dilution = metadata.get('nta_dilution', 'N/A')
-            st.markdown(f"""
-            <div style="background: #f9f9f9; padding: 10px; border-radius: 6px; border: 1px solid #e0e0e0;">
-                <div style="font-size: 10px; color: #666; margin-bottom: 5px; font-weight: 500;">Dilution</div>
-                <div style="font-size: 13px; font-weight: bold; color: #333;">{dilution}</div>
-            </div>
-            """, unsafe_allow_html=True)
-    
     # STATISTICS TAB
     with tab_statistics:
         st.subheader("📉 Statistical Summary")
