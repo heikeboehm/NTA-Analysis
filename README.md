@@ -111,14 +111,4 @@ Open an issue on GitHub or contact the maintainer.
 
 ---
 
-## 📚 More Info
-
-- **Detailed Setup**: SETUP_GUIDE.md
-- **How It Works**: PROJECT_SUMMARY.md  
-- **Technical Details**: TRANSFORMATION_SUMMARY.md
-
----
-
-**Questions?** Check the documentation or review your data file format.
-
-**Version**: 1.0.0 | **Status**: Production Ready | **Updated**: February 2026
+**Version**: 1.0.0 | **Status**: Ready for testing | **Updated**: February 2026
