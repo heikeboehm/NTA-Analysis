@@ -379,8 +379,6 @@ def extract_all_metadata_fields(content, filename):
     # Convention: Data_CBP_LEAF_5455892_2_20250710_NTA_size_001X_rawdata.txt
     # Should become: CBP_LEAF_5455892_2_20250710_NTA_size
     
-    import re
-    
     base_name = os.path.splitext(filename)[0]  # Remove .txt
     extracted_id = base_name
     
