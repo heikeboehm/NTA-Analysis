@@ -453,20 +453,29 @@ if st.session_state.analysis_complete:
             total_metric_col = 'concentration_cm-3_per_mL_avg'
             total_metric_unit = "particles/mL"
             metric_title = "Key metrics for particle number distribution"
+            focus_emoji = "📊"
+            focus_color = "#4C5B5C"
         elif 'Surface area' in research_focus:
             dist_type = 'surface_area'
             total_metric_label = "Total Surface Area"
             total_metric_col = 'area_nm^2_per_mL_avg'
             total_metric_unit = "nm²/mL"
             metric_title = "Key metrics for surface area distribution"
+            focus_emoji = "📈"
+            focus_color = "#C45B5B"
         else:  # Internal volume
             dist_type = 'volume'
             total_metric_label = "Total Volume"
             total_metric_col = 'volume_nm^3_per_mL_avg'
             total_metric_unit = "nm³/mL"
             metric_title = "Key metrics for volume distribution"
+            focus_emoji = "🔷"
+            focus_color = "#2C7F7F"
         
-        # Display pre-generated plot from Plots tab
+        # Display research focus prominently
+        st.markdown(f"### {focus_emoji} {research_focus.split('(')[0].strip()}")
+        
+        # Display plot
         if st.session_state.plot_output_dir:
             from pathlib import Path
             from PIL import Image
@@ -486,59 +495,136 @@ if st.session_state.analysis_complete:
             
             if plot_files:
                 try:
-                    # Load and display the first linear plot (usually the main one)
                     img = Image.open(plot_files[0])
                     st.image(img, use_column_width=True)
                 except Exception as e:
                     st.warning(f"Could not load plot image: {str(e)}")
             else:
-                st.info("Plot image not yet generated. Check back after analysis completes.")
+                st.info("Plot image will be available once plot generation completes.")
         else:
             st.info("Plots will be generated after analysis.")
         
         st.markdown("---")
-        st.subheader(f"📊 {metric_title}")
         
-        # Show metrics stacked vertically for readability
-        col1, col2, col3 = st.columns(3)
+        # Key metrics section with enhanced styling
+        st.markdown(f"### 📈 Key Metrics")
         
+        # Create metric cards
+        col1, col2, col3 = st.columns(3, gap="large")
+        
+        # Total metric card
         with col1:
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg, {focus_color}22 0%, {focus_color}11 100%);
+                border-left: 4px solid {focus_color};
+                padding: 20px;
+                border-radius: 8px;
+                text-align: center;
+            ">
+                <div style="font-size: 14px; color: #666; margin-bottom: 10px; font-weight: 500;">
+                    {total_metric_label}
+                </div>
+                <div style="font-size: 28px; font-weight: bold; color: {focus_color}; margin-bottom: 5px;">
+            """, unsafe_allow_html=True)
+            
             if total_metric_col in dist_df.columns:
                 linear_df = dist_df[dist_df['scale'] == 'linear']
                 total_val = linear_df[total_metric_col].sum() if not linear_df.empty else 0
-                st.metric(total_metric_label, f"{total_val:.2e}\n{total_metric_unit}")
+                st.write(f"**{total_val:.2e}**")
             else:
-                st.metric(total_metric_label, "N/A")
+                st.write("**N/A**")
+            
+            st.markdown(f"""
+                </div>
+                <div style="font-size: 12px; color: #999;">
+                    {total_metric_unit}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         
+        # D50 card
         with col2:
+            d50_avg = "N/A"
+            d50_ci = ""
             if 'linear' in stats and dist_type in stats['linear']:
                 stat_dict = stats['linear'][dist_type]
-                d50_avg = stat_dict.get('D50_avg', 'N/A')
-                d50_lower = stat_dict.get('D50_lower', 'N/A')
-                d50_upper = stat_dict.get('D50_upper', 'N/A')
-                
-                if isinstance(d50_avg, (int, float)):
-                    st.metric("D50 (nm)", f"{d50_avg:.2f}")
-                    st.caption(f"(95% CI: {d50_lower:.2f} – {d50_upper:.2f})")
-                else:
-                    st.metric("D50 (nm)", "N/A")
-            else:
-                st.metric("D50 (nm)", "N/A")
+                d50_val = stat_dict.get('D50_avg', 'N/A')
+                if isinstance(d50_val, (int, float)):
+                    d50_avg = f"{d50_val:.2f}"
+                    d50_lower = stat_dict.get('D50_lower', 'N/A')
+                    d50_upper = stat_dict.get('D50_upper', 'N/A')
+                    if isinstance(d50_lower, (int, float)) and isinstance(d50_upper, (int, float)):
+                        d50_ci = f"95% CI: {d50_lower:.2f} – {d50_upper:.2f}"
+            
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg, #1f77b422 0%, #1f77b411 100%);
+                border-left: 4px solid #1f77b4;
+                padding: 20px;
+                border-radius: 8px;
+                text-align: center;
+            ">
+                <div style="font-size: 14px; color: #666; margin-bottom: 10px; font-weight: 500;">
+                    Median Size (D50)
+                </div>
+                <div style="font-size: 28px; font-weight: bold; color: #1f77b4; margin-bottom: 5px;">
+                    {d50_avg}
+                </div>
+                <div style="font-size: 11px; color: #999; line-height: 1.6;">
+                    nm<br/>{d50_ci}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         
+        # Span card
         with col3:
+            span_avg = "N/A"
+            span_ci = ""
             if 'linear' in stats and dist_type in stats['linear']:
                 stat_dict = stats['linear'][dist_type]
-                span_avg = stat_dict.get('span_avg', 'N/A')
-                span_lower = stat_dict.get('span_lower', 'N/A')
-                span_upper = stat_dict.get('span_upper', 'N/A')
-                
-                if isinstance(span_avg, (int, float)):
-                    st.metric("Span", f"{span_avg:.2f}")
-                    st.caption(f"(95% CI: {span_lower:.2f} – {span_upper:.2f})")
-                else:
-                    st.metric("Span", "N/A")
-            else:
-                st.metric("Span", "N/A")
+                span_val = stat_dict.get('span_avg', 'N/A')
+                if isinstance(span_val, (int, float)):
+                    span_avg = f"{span_val:.2f}"
+                    span_lower = stat_dict.get('span_lower', 'N/A')
+                    span_upper = stat_dict.get('span_upper', 'N/A')
+                    if isinstance(span_lower, (int, float)) and isinstance(span_upper, (int, float)):
+                        span_ci = f"95% CI: {span_lower:.2f} – {span_upper:.2f}"
+            
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg, #ff7f0e22 0%, #ff7f0e11 100%);
+                border-left: 4px solid #ff7f0e;
+                padding: 20px;
+                border-radius: 8px;
+                text-align: center;
+            ">
+                <div style="font-size: 14px; color: #666; margin-bottom: 10px; font-weight: 500;">
+                    Distribution Width (Span)
+                </div>
+                <div style="font-size: 28px; font-weight: bold; color: #ff7f0e; margin-bottom: 5px;">
+                    {span_avg}
+                </div>
+                <div style="font-size: 11px; color: #999; line-height: 1.6;">
+                    (dimensionless)<br/>{span_ci}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Additional metrics section
+        st.markdown("### 📊 Additional Information")
+        
+        col_add1, col_add2 = st.columns(2)
+        
+        with col_add1:
+            num_files = st.session_state.metadata.get('num_replicates', 'N/A')
+            st.metric("Replicates Analyzed", num_files)
+        
+        with col_add2:
+            total_tracks = st.session_state.metadata.get('nta_number_of_traces_sum', 'N/A')
+            st.metric("Total Tracks Detected", total_tracks)
     
     # STATISTICS TAB
     with tab_statistics:
