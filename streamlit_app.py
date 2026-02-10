@@ -472,44 +472,7 @@ if st.session_state.analysis_complete:
             focus_emoji = "🔷"
             focus_color = "#2C7F7F"
         
-        # Display research focus prominently
-        st.markdown(f"### {focus_emoji} {research_focus.split('(')[0].strip()}")
-        
-        # Display plot - with auto-refresh
-        plot_placeholder = st.empty()
-        
-        if st.session_state.plot_output_dir:
-            from pathlib import Path
-            from PIL import Image
-            
-            output_path = Path(st.session_state.plot_output_dir)
-            
-            # Determine search pattern based on research focus
-            if 'Number of particles' in research_focus:
-                search_pattern = '*number*linear*.png'
-            elif 'Surface area' in research_focus:
-                search_pattern = '*surface*linear*.png'
-            else:
-                search_pattern = '*volume*linear*.png'
-            
-            # Find the plot file
-            plot_files = sorted(output_path.glob(search_pattern))
-            
-            if plot_files:
-                try:
-                    img = Image.open(plot_files[0])
-                    plot_placeholder.image(img, use_column_width=True)
-                except Exception as e:
-                    plot_placeholder.warning(f"Could not load plot image: {str(e)}")
-            else:
-                plot_placeholder.info("📊 Plot image is being generated... The visualization will appear here once plot generation completes. This typically takes a few seconds.\n\n💡 You can also view all plots in the **Plots** tab.")
-                # Add a refresh button to manually check for plots
-                if st.button("🔄 Check for Plot", key="refresh_plot"):
-                    st.rerun()
-        else:
-            plot_placeholder.info("📊 Plots will be generated after analysis completes.")
-        
-        st.markdown("---")
+
         
         # Key metrics section with enhanced styling
         st.markdown(f"### 📈 Key Metrics")
@@ -667,16 +630,27 @@ if st.session_state.analysis_complete:
         # Temperature Stability
         with qc_col3:
             temp = metadata.get('nta_temperature', 'N/A')
+            temp_sd = None
+            
             if temp != 'N/A' and temp:
                 try:
-                    temp_val = float(str(temp).split('±')[0].strip())
-                    temp_sd = float(str(temp).split('±')[1].strip()) if '±' in str(temp) else 0
-                    if temp_sd < 1.0:
-                        status, color = "✅ Stable", "#4CAF50"
-                    elif temp_sd < 2.0:
-                        status, color = "⚠️ Drift", "#ff9800"
+                    # Handle encoding issues (Â in the data)
+                    temp_str = str(temp).replace('Â', '')  # Remove broken character
+                    
+                    # Parse "23.96 ± 0.62" format
+                    if '±' in temp_str:
+                        parts = temp_str.split('±')
+                        temp_sd = float(parts[1].strip())
+                        
+                        # Check stability: < 0.5°C is good
+                        if temp_sd < 0.5:
+                            status, color = "✅ Stable", "#4CAF50"
+                        elif temp_sd < 1.0:
+                            status, color = "⚠️ Drift", "#ff9800"
+                        else:
+                            status, color = "❌ Unstable", "#F44336"
                     else:
-                        status, color = "❌ Unstable", "#F44336"
+                        status, color = "⚠️ Unknown", "#ff9800"
                 except:
                     status, color = "⚠️ Unknown", "#ff9800"
             else:
@@ -686,6 +660,7 @@ if st.session_state.analysis_complete:
             <div style="background: {color}11; border-left: 4px solid {color}; padding: 15px; border-radius: 8px; text-align: center;">
                 <div style="font-size: 12px; color: #666; margin-bottom: 8px;">Temperature</div>
                 <div style="font-size: 16px; font-weight: bold; color: {color};">{status}</div>
+                {f'<div style="font-size: 11px; color: #999; margin-top: 5px;">±{temp_sd:.2f}°C</div>' if temp_sd is not None else ''}
             </div>
             """, unsafe_allow_html=True)
         
@@ -735,7 +710,8 @@ if st.session_state.analysis_complete:
             """, unsafe_allow_html=True)
         
         with sample_col2:
-            electrolyte = metadata.get('nta_electrolyte', 'N/A')
+            # Try both field names for electrolyte
+            electrolyte = metadata.get('electrolyte', metadata.get('nta_electrolyte', 'N/A'))
             st.markdown(f"""
             <div style="background: #f5f5f5; padding: 15px; border-radius: 8px;">
                 <div style="font-size: 12px; color: #666; margin-bottom: 8px; font-weight: 500;">Buffer/Electrolyte</div>
@@ -744,7 +720,11 @@ if st.session_state.analysis_complete:
             """, unsafe_allow_html=True)
         
         with sample_col3:
+            # Clean up temperature display
             temp_display = metadata.get('nta_temperature', 'N/A')
+            if temp_display != 'N/A' and temp_display:
+                temp_display = str(temp_display).replace('Â', '')  # Remove broken character
+            
             st.markdown(f"""
             <div style="background: #f5f5f5; padding: 15px; border-radius: 8px;">
                 <div style="font-size: 12px; color: #666; margin-bottom: 8px; font-weight: 500;">Temperature</div>
