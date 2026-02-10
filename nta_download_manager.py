@@ -23,7 +23,7 @@ def create_fit_data_tsv(distribution_df, stats_dict, scale_type='linear', dist_t
     - dist_type: 'number', 'volume', or 'surface_area'
     
     Returns:
-    - DataFrame with: size_nm, measured_count, fitted_curve, fit_parameters_as_comment
+    - DataFrame with: scale, size_nm, measured_count, fitted_curve
     """
     
     # Filter to this scale
@@ -51,8 +51,9 @@ def create_fit_data_tsv(distribution_df, stats_dict, scale_type='linear', dist_t
     # Sort by size
     plot_df = plot_df.sort_values('size_nm').reset_index(drop=True)
     
-    # Create output dataframe
+    # Create output dataframe with scale column
     result_df = pd.DataFrame({
+        'scale': scale_type,
         'size_nm': plot_df['size_nm'].values,
         f'{dist_type}_measured': plot_df[measured_col].values,
         f'{dist_type}_sd': plot_df.get(measured_sd_col, pd.Series([0]*len(plot_df))).values,
@@ -166,26 +167,12 @@ def create_download_zip(output_dir, unique_id, num_replicates, metadata_dict=Non
             except Exception as e:
                 print(f"  ⚠ Could not add distribution data: {str(e)}")
         
-        # 2. Metadata (with unique ID and integrated statistics)
+        # 2. Metadata (with unique ID only)
         if metadata_dict is not None:
             try:
                 # Create metadata with unique ID
                 metadata_with_id = dict(metadata_dict)
                 metadata_with_id['Unique_ID'] = unique_id
-                
-                # Integrate statistics into metadata
-                if statistics_dict is not None:
-                    try:
-                        stats_summary = {}
-                        for scale in statistics_dict:
-                            if isinstance(statistics_dict[scale], dict):
-                                for dist_type in statistics_dict[scale]:
-                                    stat_dict = statistics_dict[scale][dist_type]
-                                    key = f"statistics_{scale}_{dist_type}"
-                                    stats_summary[key] = stat_dict
-                        metadata_with_id['Statistics'] = str(stats_summary)
-                    except Exception as e:
-                        pass
                 
                 metadata_df = pd.DataFrame(
                     [(k, v) for k, v in metadata_with_id.items()],
@@ -199,16 +186,30 @@ def create_download_zip(output_dir, unique_id, num_replicates, metadata_dict=Non
             except Exception as e:
                 print(f"  ⚠ Could not add metadata: {str(e)}")
         
-        # 3. Generate and add fit data for each distribution type
+        # 3. Generate and add fit data for each distribution type (BOTH scales)
         if distribution_df is not None and statistics_dict is not None:
             try:
                 for dist_type in ['number', 'volume', 'surface_area']:
-                    fit_tsv = export_fit_data_tsv(distribution_df, statistics_dict, 'linear', dist_type)
-                    if fit_tsv:
-                        zip_file.writestr(
-                            f"fit_data/FitData_{unique_id}_{dist_type}.txt",
-                            fit_tsv
-                        )
+                    # Get fit data for both scales
+                    fit_linear = create_fit_data_tsv(distribution_df, statistics_dict, 'linear', dist_type)
+                    fit_logarithmic = create_fit_data_tsv(distribution_df, statistics_dict, 'logarithmic', dist_type)
+                    
+                    # Combine both scales into one dataframe
+                    if fit_linear is not None or fit_logarithmic is not None:
+                        dfs_to_combine = []
+                        if fit_linear is not None:
+                            dfs_to_combine.append(fit_linear)
+                        if fit_logarithmic is not None:
+                            dfs_to_combine.append(fit_logarithmic)
+                        
+                        if dfs_to_combine:
+                            combined_df = pd.concat(dfs_to_combine, ignore_index=True)
+                            combined_tsv = combined_df.to_csv(sep='\t', index=False)
+                            
+                            zip_file.writestr(
+                                f"fit_data/FitData_{unique_id}_{dist_type}.txt",
+                                combined_tsv
+                            )
             except Exception as e:
                 print(f"  ⚠ Could not add fit data: {str(e)}")
         
