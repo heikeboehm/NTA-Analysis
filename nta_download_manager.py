@@ -142,9 +142,9 @@ def create_download_zip(output_dir, unique_id, num_replicates, metadata_dict=Non
     Create a ZIP file with all analysis results.
     
     Includes:
-    - Distribution data (PSD.txt - TSV format)
-    - Metadata (TSV) with unique ID and statistics
-    - Fit data (TSV)
+    - Distribution data: Data_{unique_id}_PSD.txt
+    - Metadata: Data_{unique_id}_metadata.txt (with unique ID and statistics)
+    - Fit data: FitData_{unique_id}_{dist_type}.txt
     - Plot PDFs (skips PNGs)
     
     Returns: bytes for download
@@ -160,7 +160,7 @@ def create_download_zip(output_dir, unique_id, num_replicates, metadata_dict=Non
             try:
                 dist_tsv = distribution_df.to_csv(sep='\t', index=False)
                 zip_file.writestr(
-                    f"data/Data_{unique_id}_avg{num_replicates}_PSD.txt",
+                    f"data/Data_{unique_id}_PSD.txt",
                     dist_tsv
                 )
             except Exception as e:
@@ -193,11 +193,24 @@ def create_download_zip(output_dir, unique_id, num_replicates, metadata_dict=Non
                 )
                 metadata_tsv = metadata_df.to_csv(sep='\t', index=False)
                 zip_file.writestr(
-                    f"data/Data_{unique_id}_avg{num_replicates}_metadata.txt",
+                    f"data/Data_{unique_id}_metadata.txt",
                     metadata_tsv
                 )
             except Exception as e:
                 print(f"  ⚠ Could not add metadata: {str(e)}")
+        
+        # 3. Generate and add fit data for each distribution type
+        if distribution_df is not None and statistics_dict is not None:
+            try:
+                for dist_type in ['number', 'volume', 'surface_area']:
+                    fit_tsv = export_fit_data_tsv(distribution_df, statistics_dict, 'linear', dist_type)
+                    if fit_tsv:
+                        zip_file.writestr(
+                            f"fit_data/FitData_{unique_id}_{dist_type}.txt",
+                            fit_tsv
+                        )
+            except Exception as e:
+                print(f"  ⚠ Could not add fit data: {str(e)}")
         
         # Add plot PDFs (skip PNGs)
         if output_path.exists():
@@ -208,15 +221,6 @@ def create_download_zip(output_dir, unique_id, num_replicates, metadata_dict=Non
                         zip_file.write(pdf_file, arcname=f"plots/{pdf_file.name}")
                     except Exception as e:
                         print(f"  ⚠ Could not add plot: {str(e)}")
-            
-            # Add fit data TSV files
-            fit_files = sorted(output_path.glob('FitData_*.txt'))
-            if fit_files:
-                for fit_file in fit_files:
-                    try:
-                        zip_file.write(fit_file, arcname=f"fit_data/{fit_file.name}")
-                    except Exception as e:
-                        print(f"  ⚠ Could not add fit data: {str(e)}")
     
     zip_buffer.seek(0)
     return zip_buffer.getvalue()
