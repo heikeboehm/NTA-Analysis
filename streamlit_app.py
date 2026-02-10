@@ -452,94 +452,49 @@ if st.session_state.analysis_complete:
             total_metric_label = "Total Concentration"
             total_metric_col = 'concentration_cm-3_per_mL_avg'
             total_metric_unit = "particles/mL"
-            plot_title = "Number-Weighted Particle Size Distribution"
-            plot_col = 'number_normalized_avg'
-            plot_err_col = 'number_normalized_sd'
-            ylabel = "Normalized Number"
-            fit_color = '#4C5B5C'
             metric_title = "Key metrics for particle number distribution"
         elif 'Surface area' in research_focus:
             dist_type = 'surface_area'
             total_metric_label = "Total Surface Area"
             total_metric_col = 'area_nm^2_per_mL_avg'
             total_metric_unit = "nm²/mL"
-            plot_title = "Surface Area-Weighted Distribution"
-            plot_col = 'area_nm^2_per_mL_avg'
-            plot_err_col = 'area_nm^2_per_mL_sd'
-            ylabel = "Surface Area (nm²/mL)"
-            fit_color = '#C45B5B'
             metric_title = "Key metrics for surface area distribution"
         else:  # Internal volume
             dist_type = 'volume'
             total_metric_label = "Total Volume"
             total_metric_col = 'volume_nm^3_per_mL_avg'
             total_metric_unit = "nm³/mL"
-            plot_title = "Volume-Weighted Distribution"
-            plot_col = 'volume_nm^3_per_mL_avg'
-            plot_err_col = 'volume_nm^3_per_mL_sd'
-            ylabel = "Volume (nm³/mL)"
-            fit_color = '#2C7F7F'
             metric_title = "Key metrics for volume distribution"
         
-        # Display plot with fit curve
-        linear_data = dist_df[(dist_df['scale'] == 'linear')].sort_values('size_nm')
-        
-        if not linear_data.empty and plot_col in linear_data.columns:
-            fig, ax = plt.subplots(figsize=(12, 6))
+        # Display pre-generated plot from Plots tab
+        if st.session_state.plot_output_dir:
+            from pathlib import Path
+            from PIL import Image
             
-            # Plot data bars
-            ax.bar(linear_data['size_nm'], linear_data[plot_col], 
-                   color=fit_color, alpha=0.7, edgecolor='black', linewidth=0.8, label='Measured Data')
+            output_path = Path(st.session_state.plot_output_dir)
             
-            # Add error bars
-            if plot_err_col in linear_data.columns:
-                ax.errorbar(linear_data['size_nm'], linear_data[plot_col],
-                           yerr=linear_data[plot_err_col],
-                           fmt='none', ecolor='black', capsize=3, alpha=0.5)
+            # Determine search pattern based on research focus
+            if 'Number of particles' in research_focus:
+                search_pattern = '*number*linear*.png'
+            elif 'Surface area' in research_focus:
+                search_pattern = '*surface*linear*.png'
+            else:
+                search_pattern = '*volume*linear*.png'
             
-            # Add lognormal fit curve if available
-            try:
-                from scipy.optimize import curve_fit
-                sizes = linear_data['size_nm'].values
-                weights = linear_data[plot_col].values
-                
-                def lognormal_pdf(x, mu, sigma, amplitude):
-                    return amplitude * (1 / (x * sigma * np.sqrt(2 * np.pi))) * \
-                           np.exp(-(np.log(x) - mu)**2 / (2 * sigma**2))
-                
-                valid_mask = (weights > 0) & (sizes > 0)
-                if np.sum(valid_mask) > 3:
-                    sizes_valid = sizes[valid_mask]
-                    weights_valid = weights[valid_mask]
-                    
-                    size_log = np.log(sizes_valid)
-                    mu_init = np.average(size_log, weights=weights_valid)
-                    sigma_init = np.sqrt(np.average((size_log - mu_init)**2, weights=weights_valid))
-                    amplitude_init = np.max(weights_valid) * sigma_init * np.sqrt(2 * np.pi) * np.exp(mu_init)
-                    
-                    params, _ = curve_fit(
-                        lognormal_pdf, sizes_valid, weights_valid,
-                        p0=[mu_init, sigma_init, amplitude_init],
-                        bounds=([0, 0, 0], [np.inf, np.inf, np.inf]),
-                        maxfev=10000
-                    )
-                    
-                    # Generate fitted curve
-                    x_fit = np.logspace(np.log10(sizes.min()), np.log10(sizes.max()), 300)
-                    y_fit = lognormal_pdf(x_fit, *params)
-                    ax.plot(x_fit, y_fit, color=fit_color, linewidth=2.5, label='Lognormal Fit', linestyle='--')
-            except:
-                pass
+            # Find the plot file
+            plot_files = sorted(output_path.glob(search_pattern))
             
-            ax.set_xlabel('Size (nm)', fontsize=12, fontweight='bold')
-            ax.set_ylabel(ylabel, fontsize=12, fontweight='bold')
-            ax.set_title(plot_title, fontsize=13, fontweight='bold')
-            ax.grid(axis='y', alpha=0.3)
-            ax.legend(fontsize=10)
-            
-            plt.tight_layout()
-            st.pyplot(fig)
-            plt.close(fig)
+            if plot_files:
+                try:
+                    # Load and display the first linear plot (usually the main one)
+                    img = Image.open(plot_files[0])
+                    st.image(img, use_column_width=True)
+                except Exception as e:
+                    st.warning(f"Could not load plot image: {str(e)}")
+            else:
+                st.info("Plot image not yet generated. Check back after analysis completes.")
+        else:
+            st.info("Plots will be generated after analysis.")
         
         st.markdown("---")
         st.subheader(f"📊 {metric_title}")
