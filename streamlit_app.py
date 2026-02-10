@@ -440,8 +440,6 @@ if st.session_state.analysis_complete:
     
     # SUMMARY TAB
     with tab_summary:
-        st.subheader("📊 Analysis Overview")
-        
         dist_df = st.session_state.distribution_data
         stats = st.session_state.statistics if st.session_state.statistics else {}
         research_focus = st.session_state.get('research_focus', 'Number of particles (size distribution)')
