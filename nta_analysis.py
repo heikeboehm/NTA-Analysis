@@ -375,12 +375,32 @@ def extract_all_metadata_fields(content, filename):
     
     metadata['filename'] = filename
     
-    base_name = os.path.splitext(filename)[0]
-    if base_name.endswith("_rawdata"):
-        base_name = base_name[:-8]
-    if base_name.startswith("Data_"):
-        base_name = base_name[5:]
-    metadata['uniqueID'] = base_name
+    # Extract uniqueID from filename
+    # Convention: Data_CBP_LEAF_5455892_2_20250710_NTA_size_001X_rawdata.txt
+    # Should become: CBP_LEAF_5455892_2_20250710_NTA_size
+    
+    import re
+    
+    base_name = os.path.splitext(filename)[0]  # Remove .txt
+    extracted_id = base_name
+    
+    # Remove _rawdata suffix if present
+    if extracted_id.endswith("_rawdata"):
+        extracted_id = extracted_id[:-8]
+    
+    # Remove _00XX (position indicator) at the end if present (e.g., _0012)
+    extracted_id = re.sub(r'_\d{4}$', '', extracted_id)
+    
+    # Remove Data_ prefix if present
+    if extracted_id.startswith("Data_"):
+        extracted_id = extracted_id[5:]
+    
+    # Use extracted ID if it's reasonable, otherwise use full base name
+    # (fallback for non-standard naming)
+    if extracted_id and len(extracted_id) > 2:
+        metadata['uniqueID'] = extracted_id
+    else:
+        metadata['uniqueID'] = base_name
     
     return metadata
 
